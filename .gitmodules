@@ -1,0 +1,6 @@
+[submodule "repos/oceans-skills"]
+	path = repos/oceans-skills
+	url = https://github.com/oceans777/oceans-skills.git
+[submodule "repos/community-skills"]
+	path = repos/community-skills
+	url = https://github.com/oceans777/community-skills.git
