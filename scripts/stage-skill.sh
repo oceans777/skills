@@ -167,19 +167,25 @@ if [ -n "$status" ]; then
     path=${line#???}
     case "$path" in
       *" -> "*)
-        path=${path##* -> }
-        ;;
-    esac
-    path=$(printf '%s' "$path" | sed 's/^"//; s/"$//')
-    case "$path" in
-      skills/*)
+        paths_to_check=$(printf '%s\n' "$path" | sed 's/ -> /\
+/g')
         ;;
       *)
-        IFS=$old_ifs
-        echo "target-dirty-outside-skills: $TARGET_REPOSITORY"
-        exit 1
+        paths_to_check=$path
         ;;
     esac
+    for path_to_check in $paths_to_check; do
+      path_to_check=$(printf '%s' "$path_to_check" | sed 's/^"//; s/"$//')
+      case "$path_to_check" in
+        skills/*)
+          ;;
+        *)
+          IFS=$old_ifs
+          echo "target-dirty-outside-skills: $TARGET_REPOSITORY"
+          exit 1
+          ;;
+      esac
+    done
   done
   IFS=$old_ifs
 fi
@@ -212,24 +218,17 @@ is_excluded_path() {
   return 1
 }
 
+RISK_NOTES_FILE=${TMPDIR:-/tmp}/stage-skill-risks.$$
+: > "$RISK_NOTES_FILE"
+
 add_risk() {
   risk=$1
-  case "
-$RISKS
-" in
-    *"
-$risk
-"*)
-      ;;
-    *)
-      RISKS="${RISKS}${risk}
-"
-      ;;
-  esac
+  if ! grep -F -x -q "$risk" "$RISK_NOTES_FILE" 2>/dev/null; then
+    printf '%s\n' "$risk" >> "$RISK_NOTES_FILE"
+  fi
 }
 
-RISKS=
-for file in $(find "$SOURCE_SKILL" -type f); do
+find "$SOURCE_SKILL" -type f | while IFS= read -r file; do
   rel=${file#"$SOURCE_SKILL"/}
   if is_excluded_path "$rel"; then
     continue
@@ -266,6 +265,8 @@ for file in $(find "$SOURCE_SKILL" -type f); do
     add_risk "risk: local absolute path"
   fi
 done
+RISKS=$(cat "$RISK_NOTES_FILE")
+rm -f "$RISK_NOTES_FILE"
 
 if [ -n "$RISKS" ] && [ "$ALLOW_RISK" -ne 1 ]; then
   echo "risk-blocked: $SKILL"
@@ -280,18 +281,17 @@ non_empty_file() {
   [ -n "$(tr -d '[:space:]' < "$path")" ]
 }
 
-has_source_attribution() {
-  non_empty_file "$SOURCE_SKILL/UPSTREAM.md" &&
-    non_empty_file "$SOURCE_SKILL/PATCHES.md" &&
-    non_empty_file "$SOURCE_SKILL/LICENSE"
-}
+if [ "$TARGET" = "community" ]; then
+  if ! non_empty_file "$SOURCE_SKILL/UPSTREAM.md" &&
+     { [ -z "$UPSTREAM_URL" ] ||
+       [ -z "$UPSTREAM_AUTHOR" ] ||
+       [ -z "$UPSTREAM_LICENSE" ]; }; then
+    echo "missing-community-attribution: $SKILL"
+    exit 1
+  fi
 
-if [ "$TARGET" = "community" ] && ! has_source_attribution; then
-  if [ -z "$UPSTREAM_URL" ] ||
-     [ -z "$UPSTREAM_AUTHOR" ] ||
-     [ -z "$UPSTREAM_LICENSE" ] ||
-     [ -z "$LICENSE_FILE" ] ||
-     [ ! -f "$LICENSE_FILE" ]; then
+  if ! non_empty_file "$SOURCE_SKILL/LICENSE" &&
+     { [ -z "$LICENSE_FILE" ] || [ ! -f "$LICENSE_FILE" ]; }; then
     echo "missing-community-attribution: $SKILL"
     exit 1
   fi
@@ -382,31 +382,33 @@ mkdir -p "$TARGET_PATH"
   fi
 done
 
-if [ "$TARGET" = "community" ] && ! {
-  non_empty_file "$TARGET_PATH/UPSTREAM.md" &&
-  non_empty_file "$TARGET_PATH/PATCHES.md" &&
-  non_empty_file "$TARGET_PATH/LICENSE"
-}; then
-  {
-    echo "# Upstream"
-    echo
-    echo "Original repository: $UPSTREAM_URL"
-    echo "Original author: $UPSTREAM_AUTHOR"
-    echo "License: $UPSTREAM_LICENSE"
-    echo "Imported by: oceans777"
-  } > "$TARGET_PATH/UPSTREAM.md"
+if [ "$TARGET" = "community" ]; then
+  if ! non_empty_file "$TARGET_PATH/UPSTREAM.md"; then
+    {
+      echo "# Upstream"
+      echo
+      echo "Original repository: $UPSTREAM_URL"
+      echo "Original author: $UPSTREAM_AUTHOR"
+      echo "License: $UPSTREAM_LICENSE"
+      echo "Imported by: oceans777"
+    } > "$TARGET_PATH/UPSTREAM.md"
+  fi
 
-  {
-    echo "# Patches"
-    echo
-    if [ -n "$PATCH_SUMMARY" ]; then
-      echo "$PATCH_SUMMARY"
-    else
-      echo "No local changes."
-    fi
-  } > "$TARGET_PATH/PATCHES.md"
+  if ! non_empty_file "$TARGET_PATH/PATCHES.md"; then
+    {
+      echo "# Patches"
+      echo
+      if [ -n "$PATCH_SUMMARY" ]; then
+        echo "$PATCH_SUMMARY"
+      else
+        echo "No local changes."
+      fi
+    } > "$TARGET_PATH/PATCHES.md"
+  fi
 
-  cp "$LICENSE_FILE" "$TARGET_PATH/LICENSE"
+  if ! non_empty_file "$TARGET_PATH/LICENSE"; then
+    cp "$LICENSE_FILE" "$TARGET_PATH/LICENSE"
+  fi
 fi
 
 print_success false

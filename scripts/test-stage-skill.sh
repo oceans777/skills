@@ -233,6 +233,19 @@ OUTPUT=$(run_stage_failure_common binary-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: binary-skill"
 assert_contains "$OUTPUT" "risk: binary or unreadable file"
 
+new_fixture spaced-path-risk
+mkdir -p "$SOURCE_ROOT/spaced-skill/dir with space"
+cat > "$SOURCE_ROOT/spaced-skill/SKILL.md" <<'EOF'
+---
+name: spaced-skill
+description: Risk file below a spaced path.
+---
+EOF
+printf '%s\n' "api_key: spaced-secret" > "$SOURCE_ROOT/spaced-skill/dir with space/secret.txt"
+OUTPUT=$(run_stage_failure_common spaced-skill oceans)
+assert_contains "$OUTPUT" "risk-blocked: spaced-skill"
+assert_contains "$OUTPUT" "risk: secret-like text"
+
 new_fixture community-missing-attribution
 OUTPUT=$(run_stage_failure_common community-skill community)
 assert_contains "$OUTPUT" "missing-community-attribution: community-skill"
@@ -251,6 +264,21 @@ assert_file_contains "$COMMUNITY_TARGET/UPSTREAM.md" "Original author: Example A
 assert_file_contains "$COMMUNITY_TARGET/UPSTREAM.md" "License: MIT"
 assert_file_contains "$COMMUNITY_TARGET/PATCHES.md" "Adjusted metadata for oceans777."
 assert_file_contains "$COMMUNITY_TARGET/LICENSE" "Example source license"
+
+new_fixture community-partial-attribution
+printf '%s\n' "# Custom upstream" "Original project notes" > "$SOURCE_ROOT/community-skill/UPSTREAM.md"
+printf '%s\n' "Custom existing license" > "$SOURCE_ROOT/community-skill/LICENSE"
+OUTPUT=$(run_stage_success_common community-skill community \
+  --upstream-url https://example.invalid/replacement \
+  --upstream-author "Replacement Author" \
+  --upstream-license Apache-2.0 \
+  --license-file "$SOURCE_ROOT/community-skill/LICENSE.source" \
+  --patch-summary "Added local patch notes.")
+COMMUNITY_TARGET=$COMMUNITY_ROOT/community-skill
+assert_contains "$OUTPUT" "staged-skill: community-skill"
+assert_file_contains "$COMMUNITY_TARGET/UPSTREAM.md" "Original project notes"
+assert_file_contains "$COMMUNITY_TARGET/LICENSE" "Custom existing license"
+assert_file_contains "$COMMUNITY_TARGET/PATCHES.md" "Added local patch notes."
 
 new_fixture dry-run
 OUTPUT=$(run_stage_success_common good-skill oceans --dry-run)
@@ -277,6 +305,14 @@ assert_contains "$OUTPUT" "target-not-main: oceans-skills"
 
 new_fixture dirty-outside-skills
 printf '%s\n' "dirty outside skills" > "$FIRST_PARTY_REPO/README.md"
+OUTPUT=$(run_stage_failure_common good-skill oceans)
+assert_contains "$OUTPUT" "target-dirty-outside-skills: oceans-skills"
+
+new_fixture dirty-rename-outside-skills
+printf '%s\n' "tracked readme" > "$FIRST_PARTY_REPO/README.md"
+git_quiet "$FIRST_PARTY_REPO" add README.md
+git_quiet "$FIRST_PARTY_REPO" commit -m "add readme"
+git_quiet "$FIRST_PARTY_REPO" mv README.md skills/renamed-readme.md
 OUTPUT=$(run_stage_failure_common good-skill oceans)
 assert_contains "$OUTPUT" "target-dirty-outside-skills: oceans-skills"
 

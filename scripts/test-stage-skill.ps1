@@ -265,6 +265,24 @@ try {
   Assert-FileContains -Path (Join-Path $CommunityTarget "PATCHES.md") -Expected "Adjusted metadata for oceans777."
   Assert-FileContains -Path (Join-Path $CommunityTarget "LICENSE") -Expected "Example source license"
 
+  $Fixture = New-Fixture -Name "community-partial-attribution"
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "community-skill\UPSTREAM.md") -Value "# Custom upstream`nOriginal project notes" -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "community-skill\LICENSE") -Value "Custom existing license" -Encoding UTF8
+  $LicenseFile = Join-Path $Fixture.SourceRoot "community-skill\LICENSE.source"
+  $Args = (Get-BaseArgs -Fixture $Fixture -Skill "community-skill" -Target "community") + @(
+    "-UpstreamUrl", "https://example.invalid/replacement",
+    "-UpstreamAuthor", "Replacement Author",
+    "-UpstreamLicense", "Apache-2.0",
+    "-LicenseFile", $LicenseFile,
+    "-PatchSummary", "Added local patch notes."
+  )
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args
+  $CommunityTarget = Join-Path $Fixture.CommunityRoot "community-skill"
+  Assert-Contains -Text $Output -Expected "staged-skill: community-skill"
+  Assert-FileContains -Path (Join-Path $CommunityTarget "UPSTREAM.md") -Expected "Original project notes"
+  Assert-FileContains -Path (Join-Path $CommunityTarget "LICENSE") -Expected "Custom existing license"
+  Assert-FileContains -Path (Join-Path $CommunityTarget "PATCHES.md") -Expected "Added local patch notes."
+
   $Fixture = New-Fixture -Name "dry-run"
   $Args = (Get-BaseArgs -Fixture $Fixture -Skill "good-skill" -Target "oceans") + @("-DryRun")
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args
@@ -288,6 +306,15 @@ try {
 
   $Fixture = New-Fixture -Name "dirty-outside-skills"
   Set-Content -LiteralPath (Join-Path $Fixture.FirstPartyRepo "README.md") -Value "dirty outside skills" -Encoding UTF8
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "good-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
+  Assert-Contains -Text $Output -Expected "target-dirty-outside-skills: oceans-skills"
+
+  $Fixture = New-Fixture -Name "dirty-rename-outside-skills"
+  Set-Content -LiteralPath (Join-Path $Fixture.FirstPartyRepo "README.md") -Value "tracked readme" -Encoding UTF8
+  Invoke-GitQuiet -RepoPath $Fixture.FirstPartyRepo -Arguments @("add", "README.md")
+  Invoke-GitQuiet -RepoPath $Fixture.FirstPartyRepo -Arguments @("commit", "-m", "add readme")
+  Invoke-GitQuiet -RepoPath $Fixture.FirstPartyRepo -Arguments @("mv", "README.md", "skills/renamed-readme.md")
   $Args = Get-BaseArgs -Fixture $Fixture -Skill "good-skill" -Target "oceans"
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "target-dirty-outside-skills: oceans-skills"

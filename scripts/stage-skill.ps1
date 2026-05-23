@@ -107,14 +107,17 @@ function Test-RepositoryDirtyOutsideSkills {
     }
 
     $PathText = $Line.Substring([Math]::Min(3, $Line.Length)).Trim()
+    $PathsToCheck = @($PathText)
     if ($PathText -like "* -> *") {
-      $PathText = ($PathText -split " -> ")[-1]
+      $PathsToCheck = $PathText -split " -> "
     }
 
-    $PathText = $PathText.Trim('"')
-    if ($PathText -notlike "skills/*" -and $PathText -notlike "skills\*") {
-      Write-Host "target-dirty-outside-skills: $RepositoryName"
-      exit 1
+    foreach ($PathToCheck in $PathsToCheck) {
+      $PathToCheck = $PathToCheck.Trim('"')
+      if ($PathToCheck -notlike "skills/*" -and $PathToCheck -notlike "skills\*") {
+        Write-Host "target-dirty-outside-skills: $RepositoryName"
+        exit 1
+      }
     }
   }
 }
@@ -194,20 +197,19 @@ function Test-NonEmptyFile {
 function Test-CommunityAttribution {
   param([Parameter(Mandatory = $true)][string] $SkillPath)
 
-  $ExistingAttribution =
-    (Test-NonEmptyFile -Path (Join-Path $SkillPath "UPSTREAM.md")) -and
-    (Test-NonEmptyFile -Path (Join-Path $SkillPath "PATCHES.md")) -and
-    (Test-NonEmptyFile -Path (Join-Path $SkillPath "LICENSE"))
+  $NeedsUpstream = -not (Test-NonEmptyFile -Path (Join-Path $SkillPath "UPSTREAM.md"))
+  $NeedsLicense = -not (Test-NonEmptyFile -Path (Join-Path $SkillPath "LICENSE"))
 
-  if ($ExistingAttribution) {
-    return $true
+  if ($NeedsUpstream -and
+      ([string]::IsNullOrWhiteSpace($UpstreamUrl) -or
+       [string]::IsNullOrWhiteSpace($UpstreamAuthor) -or
+       [string]::IsNullOrWhiteSpace($UpstreamLicense))) {
+    return $false
   }
 
-  if ([string]::IsNullOrWhiteSpace($UpstreamUrl) -or
-      [string]::IsNullOrWhiteSpace($UpstreamAuthor) -or
-      [string]::IsNullOrWhiteSpace($UpstreamLicense) -or
-      [string]::IsNullOrWhiteSpace($LicenseFile) -or
-      -not (Test-Path -LiteralPath $LicenseFile -PathType Leaf)) {
+  if ($NeedsLicense -and
+      ([string]::IsNullOrWhiteSpace($LicenseFile) -or
+       -not (Test-Path -LiteralPath $LicenseFile -PathType Leaf))) {
     return $false
   }
 
@@ -243,33 +245,34 @@ function Copy-SkillDirectory {
 function Write-CommunityAttribution {
   param([Parameter(Mandatory = $true)][string] $TargetPath)
 
-  $ExistingAttribution =
-    (Test-NonEmptyFile -Path (Join-Path $TargetPath "UPSTREAM.md")) -and
-    (Test-NonEmptyFile -Path (Join-Path $TargetPath "PATCHES.md")) -and
-    (Test-NonEmptyFile -Path (Join-Path $TargetPath "LICENSE"))
+  $UpstreamPath = Join-Path $TargetPath "UPSTREAM.md"
+  $PatchesPath = Join-Path $TargetPath "PATCHES.md"
+  $LicensePath = Join-Path $TargetPath "LICENSE"
 
-  if ($ExistingAttribution) {
-    return
+  if (-not (Test-NonEmptyFile -Path $UpstreamPath)) {
+    $UpstreamContent = @(
+      "# Upstream",
+      "",
+      "Original repository: $UpstreamUrl",
+      "Original author: $UpstreamAuthor",
+      "License: $UpstreamLicense",
+      "Imported by: oceans777"
+    ) -join [Environment]::NewLine
+    Set-Content -LiteralPath $UpstreamPath -Value $UpstreamContent -Encoding UTF8
   }
 
-  $UpstreamContent = @(
-    "# Upstream",
-    "",
-    "Original repository: $UpstreamUrl",
-    "Original author: $UpstreamAuthor",
-    "License: $UpstreamLicense",
-    "Imported by: oceans777"
-  ) -join [Environment]::NewLine
-  Set-Content -LiteralPath (Join-Path $TargetPath "UPSTREAM.md") -Value $UpstreamContent -Encoding UTF8
-
-  if ([string]::IsNullOrWhiteSpace($PatchSummary)) {
-    $PatchContent = "# Patches" + [Environment]::NewLine + [Environment]::NewLine + "No local changes."
-  } else {
-    $PatchContent = "# Patches" + [Environment]::NewLine + [Environment]::NewLine + $PatchSummary
+  if (-not (Test-NonEmptyFile -Path $PatchesPath)) {
+    if ([string]::IsNullOrWhiteSpace($PatchSummary)) {
+      $PatchContent = "# Patches" + [Environment]::NewLine + [Environment]::NewLine + "No local changes."
+    } else {
+      $PatchContent = "# Patches" + [Environment]::NewLine + [Environment]::NewLine + $PatchSummary
+    }
+    Set-Content -LiteralPath $PatchesPath -Value $PatchContent -Encoding UTF8
   }
-  Set-Content -LiteralPath (Join-Path $TargetPath "PATCHES.md") -Value $PatchContent -Encoding UTF8
 
-  Copy-Item -LiteralPath $LicenseFile -Destination (Join-Path $TargetPath "LICENSE") -Force
+  if (-not (Test-NonEmptyFile -Path $LicensePath)) {
+    Copy-Item -LiteralPath $LicenseFile -Destination $LicensePath -Force
+  }
 }
 
 $SourceRoot = Resolve-DefaultSourceRoot
