@@ -138,6 +138,18 @@ If submodules are missing, run:
 git submodule update --init --recursive
 ```
 
+If GitHub access fails while child repositories are being cloned, fix the network issue and rerun:
+
+```powershell
+.\setup.ps1
+```
+
+For day-to-day updates after setup, rerun:
+
+```powershell
+.\oceans.ps1 sync
+```
+
 If PowerShell blocks script execution, review your current policy:
 
 ```powershell

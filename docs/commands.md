@@ -30,6 +30,8 @@ cd skills
 
 Both approaches can result in all repositories being present locally. The `setup.ps1` flow is easier to remember and also runs validation and installation.
 
+`setup.ps1` and `oceans.ps1 sync` retry remote Git operations to handle temporary network failures. If GitHub is unreachable after the retries, fix the network issue and rerun the same command.
+
 ## Daily Usage
 
 ```powershell

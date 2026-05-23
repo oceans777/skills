@@ -2,13 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
-
-function Invoke-Git {
-  & git @args
-  if ($LASTEXITCODE -ne 0) {
-    throw "git $($args -join ' ') failed with exit code $LASTEXITCODE."
-  }
-}
+. "$RepoRoot\scripts\common.ps1"
 
 Write-Host "Setting up oceans777 skills..."
 
@@ -17,7 +11,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Initializing child repositories..."
-Invoke-Git submodule update --init --recursive
+Invoke-GitWithRetry -Description "Initialize child repositories" -Arguments @("submodule", "update", "--init", "--recursive") -Attempts 3 -DelaySeconds 5
 
 & "$RepoRoot\scripts\validate-skills.ps1"
 & "$RepoRoot\scripts\install-skills.ps1"
