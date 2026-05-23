@@ -23,9 +23,9 @@ cd skills
 
 ## What The Commands Do
 
-`.\setup.ps1` is for first-time setup. It initializes submodules, installs skills, validates the repository layout, and prints the next commands.
+`.\setup.ps1` is for first-time setup. It initializes submodules, validates the repository layout, installs skills, and prints the next commands.
 
-`.\oceans.ps1 sync` pulls the entry repository and updates all skill submodules.
+`.\oceans.ps1 sync` pulls the entry repository and updates skill submodules to the versions pinned by this repository.
 
 `.\oceans.ps1 install` installs all discovered oceans777 skills into your local Codex skills directory.
 

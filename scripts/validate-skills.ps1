@@ -25,7 +25,7 @@ function Test-SkillDirectory {
     }
 
     if ($RequireUpstream) {
-      foreach ($Required in @("UPSTREAM.md", "PATCHES.md")) {
+      foreach ($Required in @("UPSTREAM.md", "PATCHES.md", "LICENSE")) {
         if (-not (Test-Path (Join-Path $_.FullName $Required))) {
           $Failures.Add("Missing $Required in ${RepositoryName}: $($_.Name)")
         }

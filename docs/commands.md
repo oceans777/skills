@@ -8,7 +8,7 @@ cd skills
 .\setup.ps1
 ```
 
-`setup.ps1` initializes submodules, installs skills, validates structure, and prints next steps.
+`setup.ps1` initializes submodules, validates structure, installs skills, and prints next steps.
 
 ## Daily Usage
 
@@ -21,7 +21,7 @@ cd skills
 
 ## Command Reference
 
-`sync` updates the entry repository and submodules.
+`sync` updates the entry repository and checks out submodules at the versions pinned by the entry repository.
 
 `install` installs skills into the local Codex skills directory.
 
