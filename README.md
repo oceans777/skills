@@ -12,6 +12,28 @@ cd skills
 .\setup.ps1
 ```
 
+This is the recommended setup flow. `setup.ps1` initializes the child repositories for you, so you do not need to run `git clone --recurse-submodules`.
+
+## What Gets Cloned
+
+`oceans777/skills` is the entry repository. It references these child repositories as Git submodules:
+
+```text
+repos/oceans-skills      -> oceans777/oceans-skills
+repos/community-skills   -> oceans777/community-skills
+```
+
+After `.\setup.ps1` finishes, all three repositories are available locally:
+
+```text
+skills/
+  repos/
+    oceans-skills/
+    community-skills/
+```
+
+`git clone --recurse-submodules` means "clone the main repository and its child repositories at the same time." It is valid Git, but it is not required here because `setup.ps1` runs the submodule initialization step.
+
 ## Daily Commands
 
 ```powershell
@@ -23,9 +45,9 @@ cd skills
 
 ## What The Commands Do
 
-`.\setup.ps1` is for first-time setup. It initializes submodules, validates the repository layout, installs skills, and prints the next commands.
+`.\setup.ps1` is for first-time setup. It initializes the child repositories under `repos/`, validates the repository layout, installs skills, and prints the next commands.
 
-`.\oceans.ps1 sync` pulls the entry repository and updates skill submodules to the versions pinned by this repository.
+`.\oceans.ps1 sync` pulls the entry repository and updates child repositories to the versions pinned by this repository.
 
 `.\oceans.ps1 install` installs all discovered oceans777 skills into your local Codex skills directory.
 

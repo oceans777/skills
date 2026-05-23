@@ -16,6 +16,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
   throw "Git is required but was not found in PATH."
 }
 
+Write-Host "Initializing child repositories..."
 Invoke-Git submodule update --init --recursive
 
 & "$RepoRoot\scripts\validate-skills.ps1"

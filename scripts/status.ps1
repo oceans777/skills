@@ -3,6 +3,13 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $RepoRoot
 
+function Invoke-Git {
+  & git @args
+  if ($LASTEXITCODE -ne 0) {
+    throw "git $($args -join ' ') failed with exit code $LASTEXITCODE."
+  }
+}
+
 if ($env:CODEX_HOME) {
   $InstallRoot = Join-Path $env:CODEX_HOME "skills"
 } else {
@@ -10,11 +17,11 @@ if ($env:CODEX_HOME) {
 }
 
 Write-Host "Repository:"
-git status --short --branch
+Invoke-Git status --short --branch
 
 Write-Host ""
-Write-Host "Submodules:"
-git submodule status
+Write-Host "Child repositories:"
+Invoke-Git submodule status
 
 Write-Host ""
 Write-Host "Install root:"
