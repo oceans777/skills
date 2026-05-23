@@ -91,6 +91,7 @@ function Initialize-TestRepository {
   Invoke-GitQuiet -RepoPath $RepoPath -Arguments @("checkout", "-q", "-B", "main")
   Invoke-GitQuiet -RepoPath $RepoPath -Arguments @("config", "user.email", "stage-test@example.invalid")
   Invoke-GitQuiet -RepoPath $RepoPath -Arguments @("config", "user.name", "Stage Test")
+  Invoke-GitQuiet -RepoPath $RepoPath -Arguments @("config", "core.autocrlf", "false")
   Set-Content -LiteralPath (Join-Path $RepoPath "skills\.gitkeep") -Value "" -Encoding UTF8
   Invoke-GitQuiet -RepoPath $RepoPath -Arguments @("add", ".")
   Invoke-GitQuiet -RepoPath $RepoPath -Arguments @("commit", "-m", "initial")
@@ -141,7 +142,7 @@ function Invoke-StageSkill {
     [switch] $ExpectFailure
   )
 
-  $Output = & "$RepoRoot\scripts\stage-skill.ps1" @Arguments *>&1 | Out-String
+  $Output = & powershell -NoProfile -ExecutionPolicy Bypass -File "$RepoRoot\scripts\stage-skill.ps1" @Arguments *>&1 | Out-String
   $ExitCode = $LASTEXITCODE
   if ($ExpectFailure) {
     if ($ExitCode -eq 0) {
@@ -196,24 +197,28 @@ try {
   $Fixture = New-Fixture -Name "system-rejected"
   New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot ".system") | Out-Null
   Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot ".system\SKILL.md") -Value "---`nname: system`ndescription: System skill.`n---`n" -Encoding UTF8
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill ".system" -Target "oceans") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill ".system" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "skip-system: .system"
 
   $Fixture = New-Fixture -Name "missing-skill-md"
   New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "missing-skill") | Out-Null
   Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "missing-skill\README.md") -Value "Missing SKILL.md" -Encoding UTF8
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill "missing-skill" -Target "oceans") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "missing-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "missing-skill-md: missing-skill"
 
   $Fixture = New-Fixture -Name "secret-risk"
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill "risky-skill" -Target "oceans") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "risky-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "risk-blocked: risky-skill"
   Assert-Contains -Text $Output -Expected "risk: secret-like text"
 
   $Fixture = New-Fixture -Name "path-risk"
   New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "path-skill") | Out-Null
   Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "path-skill\SKILL.md") -Value "---`nname: path-skill`ndescription: Uses C:\Users\example\private-notes.`n---`n" -Encoding UTF8
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill "path-skill" -Target "oceans") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "path-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "risk-blocked: path-skill"
   Assert-Contains -Text $Output -Expected "risk: local absolute path"
 
@@ -222,12 +227,14 @@ try {
   Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "large-skill\SKILL.md") -Value "---`nname: large-skill`ndescription: Large file skill.`n---`n" -Encoding UTF8
   $LargeFile = Join-Path $Fixture.SourceRoot "large-skill\large.bin"
   [System.IO.File]::WriteAllBytes($LargeFile, (New-Object byte[] 1048577))
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill "large-skill" -Target "oceans") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "large-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "risk-blocked: large-skill"
   Assert-Contains -Text $Output -Expected "risk: file larger than 1 MB"
 
   $Fixture = New-Fixture -Name "community-missing-attribution"
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill "community-skill" -Target "community") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "community-skill" -Target "community"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "missing-community-attribution: community-skill"
 
   $Fixture = New-Fixture -Name "community-attribution"
@@ -265,12 +272,14 @@ try {
 
   $Fixture = New-Fixture -Name "detached-head"
   Invoke-GitQuiet -RepoPath $Fixture.FirstPartyRepo -Arguments @("checkout", "-q", "--detach", "HEAD")
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill "good-skill" -Target "oceans") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "good-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "target-not-main: oceans-skills"
 
   $Fixture = New-Fixture -Name "dirty-outside-skills"
   Set-Content -LiteralPath (Join-Path $Fixture.FirstPartyRepo "README.md") -Value "dirty outside skills" -Encoding UTF8
-  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments (Get-BaseArgs -Fixture $Fixture -Skill "good-skill" -Target "oceans") -ExpectFailure
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "good-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "target-dirty-outside-skills: oceans-skills"
 
   Write-Host "PowerShell stage skill test passed."
