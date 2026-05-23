@@ -131,16 +131,32 @@ run_stage_failure() {
   printf '%s' "$output"
 }
 
-base_args() {
+run_stage_success_common() {
   skill=$1
   target=$2
+  shift 2
 
-  printf '%s\n' \
+  run_stage_success \
     --source-root "$SOURCE_ROOT" \
     --skill "$skill" \
     --target "$target" \
     --first-party-root "$FIRST_PARTY_ROOT" \
-    --community-root "$COMMUNITY_ROOT"
+    --community-root "$COMMUNITY_ROOT" \
+    "$@"
+}
+
+run_stage_failure_common() {
+  skill=$1
+  target=$2
+  shift 2
+
+  run_stage_failure \
+    --source-root "$SOURCE_ROOT" \
+    --skill "$skill" \
+    --target "$target" \
+    --first-party-root "$FIRST_PARTY_ROOT" \
+    --community-root "$COMMUNITY_ROOT" \
+    "$@"
 }
 
 new_fixture success
@@ -165,17 +181,17 @@ name: system
 description: System skill.
 ---
 EOF
-OUTPUT=$(run_stage_failure $(base_args .system oceans))
+OUTPUT=$(run_stage_failure_common .system oceans)
 assert_contains "$OUTPUT" "skip-system: .system"
 
 new_fixture missing-skill-md
 mkdir -p "$SOURCE_ROOT/missing-skill"
 printf '%s\n' "Missing SKILL.md" > "$SOURCE_ROOT/missing-skill/README.md"
-OUTPUT=$(run_stage_failure $(base_args missing-skill oceans))
+OUTPUT=$(run_stage_failure_common missing-skill oceans)
 assert_contains "$OUTPUT" "missing-skill-md: missing-skill"
 
 new_fixture secret-risk
-OUTPUT=$(run_stage_failure $(base_args risky-skill oceans))
+OUTPUT=$(run_stage_failure_common risky-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: risky-skill"
 assert_contains "$OUTPUT" "risk: secret-like text"
 
@@ -187,7 +203,7 @@ name: path-skill
 description: Uses /Users/example/private-notes.
 ---
 EOF
-OUTPUT=$(run_stage_failure $(base_args path-skill oceans))
+OUTPUT=$(run_stage_failure_common path-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: path-skill"
 assert_contains "$OUTPUT" "risk: local absolute path"
 
@@ -200,16 +216,16 @@ description: Large file skill.
 ---
 EOF
 dd if=/dev/zero of="$SOURCE_ROOT/large-skill/large.bin" bs=1048577 count=1 >/dev/null 2>&1
-OUTPUT=$(run_stage_failure $(base_args large-skill oceans))
+OUTPUT=$(run_stage_failure_common large-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: large-skill"
 assert_contains "$OUTPUT" "risk: file larger than 1 MB"
 
 new_fixture community-missing-attribution
-OUTPUT=$(run_stage_failure $(base_args community-skill community))
+OUTPUT=$(run_stage_failure_common community-skill community)
 assert_contains "$OUTPUT" "missing-community-attribution: community-skill"
 
 new_fixture community-attribution
-OUTPUT=$(run_stage_success $(base_args community-skill community) \
+OUTPUT=$(run_stage_success_common community-skill community \
   --upstream-url https://example.invalid/community-skill \
   --upstream-author "Example Author" \
   --upstream-license MIT \
@@ -224,7 +240,7 @@ assert_file_contains "$COMMUNITY_TARGET/PATCHES.md" "Adjusted metadata for ocean
 assert_file_contains "$COMMUNITY_TARGET/LICENSE" "Example source license"
 
 new_fixture dry-run
-OUTPUT=$(run_stage_success $(base_args good-skill oceans) --dry-run)
+OUTPUT=$(run_stage_success_common good-skill oceans --dry-run)
 assert_contains "$OUTPUT" "dry_run: true"
 assert_path_missing "$FIRST_PARTY_ROOT/good-skill"
 
@@ -238,17 +254,17 @@ description: Other repo copy.
 EOF
 git_quiet "$COMMUNITY_REPO" add .
 git_quiet "$COMMUNITY_REPO" commit -m "add duplicate"
-OUTPUT=$(run_stage_failure $(base_args good-skill oceans) --replace-existing)
+OUTPUT=$(run_stage_failure_common good-skill oceans --replace-existing)
 assert_contains "$OUTPUT" "duplicate-cross-repository: good-skill"
 
 new_fixture detached-head
 git_quiet "$FIRST_PARTY_REPO" checkout -q --detach HEAD
-OUTPUT=$(run_stage_failure $(base_args good-skill oceans))
+OUTPUT=$(run_stage_failure_common good-skill oceans)
 assert_contains "$OUTPUT" "target-not-main: oceans-skills"
 
 new_fixture dirty-outside-skills
 printf '%s\n' "dirty outside skills" > "$FIRST_PARTY_REPO/README.md"
-OUTPUT=$(run_stage_failure $(base_args good-skill oceans))
+OUTPUT=$(run_stage_failure_common good-skill oceans)
 assert_contains "$OUTPUT" "target-dirty-outside-skills: oceans-skills"
 
 echo "Shell stage skill test passed."
