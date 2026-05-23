@@ -80,7 +80,7 @@ skills/
 
 `oceans.ps1 sync` and `./oceans sync` pull the entry repository and update child repositories to the versions pinned by this repository.
 
-`oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory.
+`oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker.
 
 `oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, and third-party attribution files.
 
@@ -136,6 +136,23 @@ $HOME/.codex/skills
 
 The installer does not delete local private skills.
 
+## Local-First Duplicate Policy
+
+Local skills always win over repository skills with the same folder name.
+
+```text
+Local skill has no .oceans-skill-source marker
+  -> duplicate-local-wins; keep the local skill and skip the repository copy
+
+Local skill has .oceans-skill-source from oceans-skills or community-skills
+  -> managed by oceans777; update from the repository
+
+Local skill has .oceans-skill-source from an unknown source
+  -> duplicate-unknown-marker; keep the local skill and ask for manual review
+```
+
+This protects private or manually installed skills from being overwritten by `setup` or `install`.
+
 ## Review Local Skills For Import
 
 Use this before moving local skills into GitHub:
@@ -172,7 +189,15 @@ The report classifies local skills as:
 skip-system         -> do not publish Codex system skills
 missing-skill-md    -> repair before import
 already-managed     -> already has an oceans777 source marker
+duplicate-local-wins -> local skill matches a repository skill, but the local copy wins
 review-source       -> choose oceans-skills, community-skills, or do not publish
+```
+
+When a local skill name already exists in the repository, the report includes:
+
+```text
+repository_match: oceans-skills or community-skills
+action: keep local skill; repository version will not overwrite it
 ```
 
 For `review-source` items, use this rule:

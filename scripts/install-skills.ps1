@@ -1,11 +1,17 @@
+param(
+  [string] $InstallRoot
+)
+
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
-if ($env:CODEX_HOME) {
-  $InstallRoot = Join-Path $env:CODEX_HOME "skills"
-} else {
-  $InstallRoot = Join-Path $HOME ".codex\skills"
+if (-not $InstallRoot) {
+  if ($env:CODEX_HOME) {
+    $InstallRoot = Join-Path $env:CODEX_HOME "skills"
+  } else {
+    $InstallRoot = Join-Path $HOME ".codex\skills"
+  }
 }
 
 $InstallRootItem = New-Item -ItemType Directory -Force -Path $InstallRoot
@@ -18,6 +24,26 @@ $Sources = @(
   @{ Repository = "oceans-skills"; Path = Join-Path $RepoRoot "repos\oceans-skills\skills" },
   @{ Repository = "community-skills"; Path = Join-Path $RepoRoot "repos\community-skills\skills" }
 )
+
+function Get-SourceRepository {
+  param([string] $MarkerPath)
+
+  $Line = Get-Content -LiteralPath $MarkerPath -ErrorAction SilentlyContinue |
+    Where-Object { $_ -like "source_repository=*" } |
+    Select-Object -First 1
+
+  if (-not $Line) {
+    return "unknown"
+  }
+
+  return $Line.Substring("source_repository=".Length)
+}
+
+function Test-KnownOceansSource {
+  param([string] $Repository)
+
+  return $Repository -eq "oceans-skills" -or $Repository -eq "community-skills"
+}
 
 foreach ($Source in $Sources) {
   if (-not (Test-Path $Source.Path)) {
@@ -35,13 +61,21 @@ foreach ($Source in $Sources) {
     }
 
     $ShouldInstall = $true
+    $IsUpdate = $false
     if (Test-Path -LiteralPath $Target) {
       $Marker = Join-Path $Target ".oceans-skill-source"
       if (-not (Test-Path -LiteralPath $Marker)) {
-        Write-Host "Skipping local unmanaged skill: $SkillName"
+        Write-Host "duplicate-local-wins: $SkillName"
         $ShouldInstall = $false
       } else {
-        Remove-Item -LiteralPath $Target -Recurse -Force
+        $ExistingSource = Get-SourceRepository -MarkerPath $Marker
+        if (-not (Test-KnownOceansSource -Repository $ExistingSource)) {
+          Write-Host "duplicate-unknown-marker: $SkillName"
+          $ShouldInstall = $false
+        } else {
+          Remove-Item -LiteralPath $Target -Recurse -Force
+          $IsUpdate = $true
+        }
       }
     }
 
@@ -53,7 +87,11 @@ foreach ($Source in $Sources) {
         "source_path=$($_.FullName)"
       )
       Set-Content -LiteralPath (Join-Path $Target ".oceans-skill-source") -Value $MarkerContent -Encoding UTF8
-      Write-Host "Installed skill: $SkillName"
+      if ($IsUpdate) {
+        Write-Host "Updated managed oceans777 skill: $SkillName"
+      } else {
+        Write-Host "Installed skill: $SkillName"
+      }
     }
   }
 }

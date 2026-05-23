@@ -49,6 +49,29 @@ SOURCE_ROOT_REAL=$(CDPATH= cd "$SOURCE_ROOT" && pwd -P)
 FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 
+repository_match() {
+  skill_name=$1
+  matches=
+
+  if [ -d "$FIRST_PARTY_ROOT/$skill_name" ]; then
+    matches=oceans-skills
+  fi
+
+  if [ -d "$COMMUNITY_ROOT/$skill_name" ]; then
+    if [ -n "$matches" ]; then
+      matches="$matches, community-skills"
+    else
+      matches=community-skills
+    fi
+  fi
+
+  if [ -z "$matches" ]; then
+    echo "none"
+  else
+    echo "$matches"
+  fi
+}
+
 managed_source() {
   skill_path=$1
   marker=$skill_path/.oceans-skill-source
@@ -82,12 +105,15 @@ print_risks() {
 print_item() {
   skill_path=$1
   skill_name=${skill_path##*/}
+  repository_match_value=$(repository_match "$skill_name")
 
   echo "- $skill_name"
 
   if [ "$skill_name" = ".system" ]; then
     echo "  status: skip-system"
     echo "  destination: do not publish"
+    echo "  repository_match: $repository_match_value"
+    echo "  action: do not publish"
     echo "  reason: Codex system skills are not oceans777 source skills."
     echo "  risk: not scanned"
     return
@@ -96,6 +122,8 @@ print_item() {
   if [ ! -f "$skill_path/SKILL.md" ]; then
     echo "  status: missing-skill-md"
     echo "  destination: manual repair before import"
+    echo "  repository_match: $repository_match_value"
+    echo "  action: repair SKILL.md before deciding whether to publish"
     echo "  reason: A publishable skill must include SKILL.md."
     print_risks "$skill_path"
     return
@@ -106,19 +134,33 @@ print_item() {
     oceans-skills)
       echo "  status: already-managed"
       echo "  destination: repos/oceans-skills/skills/$skill_name"
+      echo "  repository_match: $repository_match_value"
+      echo "  action: managed by oceans777; install may update it"
       echo "  reason: Local skill has an oceans777 first-party source marker."
       print_risks "$skill_path"
       ;;
     community-skills)
       echo "  status: already-managed"
       echo "  destination: repos/community-skills/skills/$skill_name"
+      echo "  repository_match: $repository_match_value"
+      echo "  action: managed by oceans777; install may update it"
       echo "  reason: Local skill has an oceans777 community source marker."
       print_risks "$skill_path"
       ;;
     *)
-      echo "  status: review-source"
-      echo "  destination: oceans-skills if you created it; community-skills if third-party; do not publish if private"
-      echo "  reason: No oceans777 source marker found."
+      if [ "$repository_match_value" != "none" ]; then
+        echo "  status: duplicate-local-wins"
+        echo "  destination: local skill stays installed"
+        echo "  repository_match: $repository_match_value"
+        echo "  action: keep local skill; repository version will not overwrite it"
+        echo "  reason: A repository skill has the same name, but this local skill has no oceans777 source marker."
+      else
+        echo "  status: review-source"
+        echo "  destination: oceans-skills if you created it; community-skills if third-party; do not publish if private"
+        echo "  repository_match: $repository_match_value"
+        echo "  action: review source before publishing"
+        echo "  reason: No oceans777 source marker found."
+      fi
       print_risks "$skill_path"
       ;;
   esac
