@@ -1,5 +1,7 @@
 param(
-  [string] $InstallRoot
+  [string] $InstallRoot,
+  [string] $FirstPartySkillsRoot,
+  [string] $CommunitySkillsRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +16,14 @@ if (-not $InstallRoot) {
   }
 }
 
+if (-not $FirstPartySkillsRoot) {
+  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
+}
+
+if (-not $CommunitySkillsRoot) {
+  $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills"
+}
+
 $InstallRootItem = New-Item -ItemType Directory -Force -Path $InstallRoot
 $ResolvedInstallRoot = [System.IO.Path]::GetFullPath($InstallRootItem.FullName)
 if (-not $ResolvedInstallRoot.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
@@ -21,8 +31,8 @@ if (-not $ResolvedInstallRoot.EndsWith([System.IO.Path]::DirectorySeparatorChar)
 }
 
 $Sources = @(
-  @{ Repository = "oceans-skills"; Path = Join-Path $RepoRoot "repos\oceans-skills\skills" },
-  @{ Repository = "community-skills"; Path = Join-Path $RepoRoot "repos\community-skills\skills" }
+  @{ Repository = "oceans-skills"; Path = $FirstPartySkillsRoot },
+  @{ Repository = "community-skills"; Path = $CommunitySkillsRoot }
 )
 
 function Get-SourceRepository {
@@ -71,6 +81,9 @@ foreach ($Source in $Sources) {
         $ExistingSource = Get-SourceRepository -MarkerPath $Marker
         if (-not (Test-KnownOceansSource -Repository $ExistingSource)) {
           Write-Host "duplicate-unknown-marker: $SkillName"
+          $ShouldInstall = $false
+        } elseif ($ExistingSource -ne $Source.Repository) {
+          Write-Host "duplicate-managed-source-mismatch: $SkillName"
           $ShouldInstall = $false
         } else {
           Remove-Item -LiteralPath $Target -Recurse -Force

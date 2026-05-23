@@ -1,7 +1,20 @@
+param(
+  [string] $FirstPartySkillsRoot,
+  [string] $CommunitySkillsRoot
+)
+
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $Failures = New-Object System.Collections.Generic.List[string]
+
+if (-not $FirstPartySkillsRoot) {
+  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
+}
+
+if (-not $CommunitySkillsRoot) {
+  $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills"
+}
 
 function Test-SkillDirectory {
   param(
@@ -34,15 +47,33 @@ function Test-SkillDirectory {
   }
 }
 
+function Get-SkillNames {
+  param([string] $SkillsPath)
+
+  if (-not (Test-Path $SkillsPath)) {
+    return @()
+  }
+
+  return @(Get-ChildItem -Path $SkillsPath -Directory | ForEach-Object { $_.Name })
+}
+
 Test-SkillDirectory `
   -RepositoryName "oceans-skills" `
-  -SkillsPath (Join-Path $RepoRoot "repos\oceans-skills\skills") `
+  -SkillsPath $FirstPartySkillsRoot `
   -RequireUpstream $false
 
 Test-SkillDirectory `
   -RepositoryName "community-skills" `
-  -SkillsPath (Join-Path $RepoRoot "repos\community-skills\skills") `
+  -SkillsPath $CommunitySkillsRoot `
   -RequireUpstream $true
+
+$FirstPartyNames = Get-SkillNames -SkillsPath $FirstPartySkillsRoot
+$CommunityNames = Get-SkillNames -SkillsPath $CommunitySkillsRoot
+foreach ($Name in $FirstPartyNames) {
+  if ($CommunityNames -contains $Name) {
+    $Failures.Add("Duplicate skill name across repositories: $Name")
+  }
+}
 
 if ($Failures.Count -gt 0) {
   $Failures | ForEach-Object { Write-Error $_ }

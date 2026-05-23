@@ -1,5 +1,7 @@
 param(
   [string] $SourceRoot,
+  [string] $FirstPartySkillsRoot,
+  [string] $CommunitySkillsRoot,
 
   [ValidateSet("text")]
   [string] $Format = "text"
@@ -22,8 +24,16 @@ if (-not (Test-Path -LiteralPath $SourceRoot -PathType Container)) {
 }
 
 $ResolvedSourceRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $SourceRoot).Path)
-$FirstPartyRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
-$CommunityRoot = Join-Path $RepoRoot "repos\community-skills\skills"
+if (-not $FirstPartySkillsRoot) {
+  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
+}
+
+if (-not $CommunitySkillsRoot) {
+  $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills"
+}
+
+$FirstPartyRoot = $FirstPartySkillsRoot
+$CommunityRoot = $CommunitySkillsRoot
 
 function Get-RepositoryMatch {
   param([string] $SkillName)

@@ -4,6 +4,8 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SOURCE_ROOT=${CODEX_HOME:+$CODEX_HOME/skills}
+FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 FORMAT=text
 
 if [ -z "${SOURCE_ROOT:-}" ]; then
@@ -28,6 +30,22 @@ while [ "$#" -gt 0 ]; do
       FORMAT=$2
       shift 2
       ;;
+    --first-party-root)
+      if [ "$#" -lt 2 ]; then
+        echo "--first-party-root needs a path." >&2
+        exit 2
+      fi
+      FIRST_PARTY_ROOT=$2
+      shift 2
+      ;;
+    --community-root)
+      if [ "$#" -lt 2 ]; then
+        echo "--community-root needs a path." >&2
+        exit 2
+      fi
+      COMMUNITY_ROOT=$2
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1" >&2
       exit 2
@@ -46,8 +64,6 @@ if [ ! -d "$SOURCE_ROOT" ]; then
 fi
 
 SOURCE_ROOT_REAL=$(CDPATH= cd "$SOURCE_ROOT" && pwd -P)
-FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
-COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 
 repository_match() {
   skill_name=$1

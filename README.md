@@ -82,7 +82,7 @@ skills/
 
 `oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker.
 
-`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, and third-party attribution files.
+`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, third-party attribution files, and cross-repository skill name uniqueness.
 
 `oceans.ps1 status` and `./oceans status` show Git status, submodule status, and local install target information.
 
@@ -120,6 +120,8 @@ skills/
 
 `oceans777/community-skills` stores third-party skills that oceans777 mirrors, adapts, or repackages with attribution.
 
+Skill folder names must be unique across both repositories. The local install directory is flat, so `repos/oceans-skills/skills/example/` and `repos/community-skills/skills/example/` would collide during installation. `validate` rejects cross-repository duplicates before they can be published.
+
 ## Install Location
 
 Skills are installed into:
@@ -144,8 +146,11 @@ Local skills always win over repository skills with the same folder name.
 Local skill has no .oceans-skill-source marker
   -> duplicate-local-wins; keep the local skill and skip the repository copy
 
-Local skill has .oceans-skill-source from oceans-skills or community-skills
-  -> managed by oceans777; update from the repository
+Local skill has .oceans-skill-source from the same oceans777 repository
+  -> managed by oceans777; update from that repository
+
+Local skill has .oceans-skill-source from a different oceans777 repository
+  -> duplicate-managed-source-mismatch; keep the local skill and ask for manual review
 
 Local skill has .oceans-skill-source from an unknown source
   -> duplicate-unknown-marker; keep the local skill and ask for manual review

@@ -4,6 +4,8 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 INSTALL_ROOT=${CODEX_HOME:+$CODEX_HOME/skills}
+FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+COMMUNITY_SKILLS_ROOT=$REPO_ROOT/repos/community-skills/skills
 
 if [ -z "${INSTALL_ROOT:-}" ]; then
   INSTALL_ROOT=$HOME/.codex/skills
@@ -17,6 +19,22 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       INSTALL_ROOT=$2
+      shift 2
+      ;;
+    --first-party-root)
+      if [ "$#" -lt 2 ]; then
+        echo "--first-party-root needs a path." >&2
+        exit 2
+      fi
+      FIRST_PARTY_SKILLS_ROOT=$2
+      shift 2
+      ;;
+    --community-root)
+      if [ "$#" -lt 2 ]; then
+        echo "--community-root needs a path." >&2
+        exit 2
+      fi
+      COMMUNITY_SKILLS_ROOT=$2
       shift 2
       ;;
     *)
@@ -82,6 +100,11 @@ install_from_repository() {
         continue
       fi
 
+      if [ "$existing_source" != "$repository_name" ]; then
+        echo "duplicate-managed-source-mismatch: $skill_name"
+        continue
+      fi
+
       rm -rf "$target"
       is_update=1
     else
@@ -101,7 +124,7 @@ install_from_repository() {
   done
 }
 
-install_from_repository "oceans-skills" "$REPO_ROOT/repos/oceans-skills/skills"
-install_from_repository "community-skills" "$REPO_ROOT/repos/community-skills/skills"
+install_from_repository "oceans-skills" "$FIRST_PARTY_SKILLS_ROOT"
+install_from_repository "community-skills" "$COMMUNITY_SKILLS_ROOT"
 
 echo "Install root: $INSTALL_ROOT"

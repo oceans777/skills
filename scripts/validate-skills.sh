@@ -3,7 +3,34 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
+FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+COMMUNITY_SKILLS_ROOT=$REPO_ROOT/repos/community-skills/skills
 failures=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --first-party-root)
+      if [ "$#" -lt 2 ]; then
+        echo "--first-party-root needs a path." >&2
+        exit 2
+      fi
+      FIRST_PARTY_SKILLS_ROOT=$2
+      shift 2
+      ;;
+    --community-root)
+      if [ "$#" -lt 2 ]; then
+        echo "--community-root needs a path." >&2
+        exit 2
+      fi
+      COMMUNITY_SKILLS_ROOT=$2
+      shift 2
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
 
 add_failure() {
   echo "ERROR: $*" >&2
@@ -44,8 +71,25 @@ test_skill_directory() {
   done
 }
 
-test_skill_directory "oceans-skills" "$REPO_ROOT/repos/oceans-skills/skills" "false"
-test_skill_directory "community-skills" "$REPO_ROOT/repos/community-skills/skills" "true"
+test_duplicate_names() {
+  first_party_path=$1
+  community_path=$2
+
+  [ -d "$first_party_path" ] || return
+  [ -d "$community_path" ] || return
+
+  for skill_path in "$first_party_path"/*; do
+    [ -d "$skill_path" ] || continue
+    skill_name=${skill_path##*/}
+    if [ -d "$community_path/$skill_name" ]; then
+      add_failure "Duplicate skill name across repositories: $skill_name"
+    fi
+  done
+}
+
+test_skill_directory "oceans-skills" "$FIRST_PARTY_SKILLS_ROOT" "false"
+test_skill_directory "community-skills" "$COMMUNITY_SKILLS_ROOT" "true"
+test_duplicate_names "$FIRST_PARTY_SKILLS_ROOT" "$COMMUNITY_SKILLS_ROOT"
 
 if [ "$failures" -gt 0 ]; then
   echo "Validation failed with $failures issue(s)." >&2
