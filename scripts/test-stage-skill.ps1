@@ -232,6 +232,16 @@ try {
   Assert-Contains -Text $Output -Expected "risk-blocked: large-skill"
   Assert-Contains -Text $Output -Expected "risk: file larger than 1 MB"
 
+  $Fixture = New-Fixture -Name "binary-risk"
+  New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "binary-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "binary-skill\SKILL.md") -Value "---`nname: binary-skill`ndescription: Binary file skill.`n---`n" -Encoding UTF8
+  $BinaryFile = Join-Path $Fixture.SourceRoot "binary-skill\invalid.bin"
+  [System.IO.File]::WriteAllBytes($BinaryFile, [byte[]](0xff, 0xfe, 0xfd))
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "binary-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
+  Assert-Contains -Text $Output -Expected "risk-blocked: binary-skill"
+  Assert-Contains -Text $Output -Expected "risk: binary or unreadable file"
+
   $Fixture = New-Fixture -Name "community-missing-attribution"
   $Args = Get-BaseArgs -Fixture $Fixture -Skill "community-skill" -Target "community"
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure

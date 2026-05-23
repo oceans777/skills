@@ -47,12 +47,12 @@ while [ "$#" -gt 0 ]; do
       TARGET=$2
       shift 2
       ;;
-    --first-party-root)
+    --first-party-skills-root|--first-party-root)
       need_value "$1" "${2:-}"
       FIRST_PARTY_ROOT=$2
       shift 2
       ;;
-    --community-root)
+    --community-skills-root|--community-root)
       need_value "$1" "${2:-}"
       COMMUNITY_ROOT=$2
       shift 2
@@ -242,6 +242,18 @@ for file in $(find "$SOURCE_SKILL" -type f); do
   fi
 
   if ! LC_ALL=C grep -Iq . "$file" 2>/dev/null && [ "$size" -gt 0 ]; then
+    add_risk "risk: binary or unreadable file"
+    continue
+  fi
+
+  if command -v perl >/dev/null 2>&1 &&
+     ! perl -MEncode=decode -0777 -ne 'eval { decode("UTF-8", $_, 1); 1 } or exit 1' "$file" 2>/dev/null; then
+    add_risk "risk: binary or unreadable file"
+    continue
+  fi
+
+  if command -v iconv >/dev/null 2>&1 &&
+     ! iconv -f UTF-8 -t UTF-8 "$file" >/dev/null 2>&1; then
     add_risk "risk: binary or unreadable file"
     continue
   fi

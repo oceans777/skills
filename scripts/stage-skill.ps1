@@ -160,7 +160,8 @@ function Get-RiskNotes {
         continue
       }
 
-      $Content = [System.Text.Encoding]::UTF8.GetString($Bytes)
+      $StrictUtf8 = New-Object System.Text.UTF8Encoding -ArgumentList $false, $true
+      $Content = $StrictUtf8.GetString($Bytes)
     } catch {
       if (-not $Risks.Contains("risk: binary or unreadable file")) {
         $Risks.Add("risk: binary or unreadable file")

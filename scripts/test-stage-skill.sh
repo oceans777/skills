@@ -164,8 +164,8 @@ OUTPUT=$(sh "$REPO_ROOT/scripts/stage-skill.sh" \
   --source-root "$SOURCE_ROOT" \
   --skill good-skill \
   --target oceans \
-  --first-party-root "$FIRST_PARTY_ROOT" \
-  --community-root "$COMMUNITY_ROOT")
+  --first-party-skills-root "$FIRST_PARTY_ROOT" \
+  --community-skills-root "$COMMUNITY_ROOT")
 
 assert_contains "$OUTPUT" "staged-skill: good-skill"
 assert_contains "$OUTPUT" "target_repository: oceans-skills"
@@ -219,6 +219,19 @@ dd if=/dev/zero of="$SOURCE_ROOT/large-skill/large.bin" bs=1048577 count=1 >/dev
 OUTPUT=$(run_stage_failure_common large-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: large-skill"
 assert_contains "$OUTPUT" "risk: file larger than 1 MB"
+
+new_fixture binary-risk
+mkdir -p "$SOURCE_ROOT/binary-skill"
+cat > "$SOURCE_ROOT/binary-skill/SKILL.md" <<'EOF'
+---
+name: binary-skill
+description: Binary file skill.
+---
+EOF
+printf '\377\376\375' > "$SOURCE_ROOT/binary-skill/invalid.bin"
+OUTPUT=$(run_stage_failure_common binary-skill oceans)
+assert_contains "$OUTPUT" "risk-blocked: binary-skill"
+assert_contains "$OUTPUT" "risk: binary or unreadable file"
 
 new_fixture community-missing-attribution
 OUTPUT=$(run_stage_failure_common community-skill community)
