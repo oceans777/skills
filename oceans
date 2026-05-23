@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+REPO_ROOT=$(CDPATH= cd "$(dirname "$0")" && pwd)
+COMMAND=${1:-help}
+
+case "$COMMAND" in
+  sync)
+    sh "$REPO_ROOT/scripts/sync.sh"
+    ;;
+  install)
+    sh "$REPO_ROOT/scripts/install-skills.sh"
+    ;;
+  validate)
+    sh "$REPO_ROOT/scripts/validate-skills.sh"
+    ;;
+  status)
+    sh "$REPO_ROOT/scripts/status.sh"
+    ;;
+  help)
+    echo "oceans777 skills commands:"
+    echo "  ./oceans sync      Pull updates and check out pinned child repositories"
+    echo "  ./oceans install   Install skills locally"
+    echo "  ./oceans validate  Validate repository and skill structure"
+    echo "  ./oceans status    Show repository and install status"
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    echo "Run './oceans help' for available commands." >&2
+    exit 2
+    ;;
+esac

@@ -6,13 +6,31 @@ You only need to clone this repository. It connects to the first-party and commu
 
 ## Quick Start
 
+### Windows
+
 ```powershell
 git clone https://github.com/oceans777/skills.git
 cd skills
 .\setup.ps1
 ```
 
-This is the recommended setup flow. `setup.ps1` initializes the child repositories for you, so you do not need to run `git clone --recurse-submodules`.
+### Ubuntu
+
+```sh
+git clone https://github.com/oceans777/skills.git
+cd skills
+./setup.sh
+```
+
+### macOS
+
+```sh
+git clone https://github.com/oceans777/skills.git
+cd skills
+./setup.sh
+```
+
+These are the recommended setup flows. `setup.ps1` and `setup.sh` initialize the child repositories for you, so you do not need to run `git clone --recurse-submodules`.
 
 ## What Gets Cloned
 
@@ -23,7 +41,7 @@ repos/oceans-skills      -> oceans777/oceans-skills
 repos/community-skills   -> oceans777/community-skills
 ```
 
-After `.\setup.ps1` finishes, all three repositories are available locally:
+After setup finishes, all three repositories are available locally:
 
 ```text
 skills/
@@ -32,9 +50,11 @@ skills/
     community-skills/
 ```
 
-`git clone --recurse-submodules` means "clone the main repository and its child repositories at the same time." It is valid Git, but it is not required here because `setup.ps1` runs the submodule initialization step.
+`git clone --recurse-submodules` means "clone the main repository and its child repositories at the same time." It is valid Git, but it is not required here because setup runs the submodule initialization step.
 
 ## Daily Commands
+
+### Windows
 
 ```powershell
 .\oceans.ps1 sync
@@ -43,33 +63,48 @@ skills/
 .\oceans.ps1 status
 ```
 
+### Ubuntu and macOS
+
+```sh
+./oceans sync
+./oceans install
+./oceans validate
+./oceans status
+```
+
 ## What The Commands Do
 
-`.\setup.ps1` is for first-time setup. It initializes the child repositories under `repos/`, validates the repository layout, installs skills, and prints the next commands.
+`setup.ps1` and `setup.sh` are for first-time setup. They initialize the child repositories under `repos/`, validate the repository layout, install skills, and print the next commands.
 
-`.\oceans.ps1 sync` pulls the entry repository and updates child repositories to the versions pinned by this repository.
+`oceans.ps1 sync` and `./oceans sync` pull the entry repository and update child repositories to the versions pinned by this repository.
 
-`.\oceans.ps1 install` installs all discovered oceans777 skills into your local Codex skills directory.
+`oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory.
 
-`.\oceans.ps1 validate` checks repository structure, required skill files, and third-party attribution files.
+`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, and third-party attribution files.
 
-`.\oceans.ps1 status` shows Git status, submodule status, and local install target information.
+`oceans.ps1 status` and `./oceans status` show Git status, submodule status, and local install target information.
 
 ## Repository Layout
 
 ```text
 skills/
   setup.ps1
+  setup.sh
   oceans.ps1
+  oceans
   manifest.yaml
   repos/
     oceans-skills/
     community-skills/
   scripts/
     install-skills.ps1
+    install-skills.sh
     sync.ps1
+    sync.sh
     validate-skills.ps1
+    validate-skills.sh
     status.ps1
+    status.sh
   docs/
 ```
 
@@ -84,13 +119,13 @@ skills/
 Skills are installed into:
 
 ```text
-$env:CODEX_HOME\skills
+CODEX_HOME/skills
 ```
 
 If `CODEX_HOME` is not set, skills are installed into:
 
 ```text
-$HOME\.codex\skills
+$HOME/.codex/skills
 ```
 
 The installer does not delete local private skills.
@@ -134,20 +169,44 @@ Use `UPSTREAM.md` to record the original repository, author, license, import dat
 
 If submodules are missing, run:
 
+Windows:
+
 ```powershell
+git submodule update --init --recursive
+```
+
+Ubuntu and macOS:
+
+```sh
 git submodule update --init --recursive
 ```
 
 If GitHub access fails while child repositories are being cloned, fix the network issue and rerun:
 
+Windows:
+
 ```powershell
 .\setup.ps1
 ```
 
+Ubuntu and macOS:
+
+```sh
+./setup.sh
+```
+
 For day-to-day updates after setup, rerun:
+
+Windows:
 
 ```powershell
 .\oceans.ps1 sync
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans sync
 ```
 
 If PowerShell blocks script execution, review your current policy:
@@ -160,4 +219,10 @@ For a normal personal Windows machine, this often fixes local script execution:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+If Ubuntu or macOS reports `Permission denied` for the shell entrypoints, restore executable permissions:
+
+```sh
+chmod +x setup.sh oceans scripts/*.sh
 ```
