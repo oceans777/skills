@@ -1,7 +1,9 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("sync", "install", "validate", "status", "help")]
-  [string] $Command = "help"
+  [ValidateSet("sync", "install", "validate", "status", "import", "help")]
+  [string] $Command = "help",
+
+  [string] $SourceRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,11 +22,19 @@ switch ($Command) {
   "status" {
     & "$RepoRoot\scripts\status.ps1"
   }
+  "import" {
+    $ImportArgs = @{}
+    if ($SourceRoot) {
+      $ImportArgs.SourceRoot = $SourceRoot
+    }
+    & "$RepoRoot\scripts\import-skills.ps1" @ImportArgs
+  }
   "help" {
     Write-Host "oceans777 skills commands:"
     Write-Host "  .\oceans.ps1 sync      Pull updates and check out pinned child repositories"
     Write-Host "  .\oceans.ps1 install   Install skills locally"
     Write-Host "  .\oceans.ps1 validate  Validate repository and skill structure"
     Write-Host "  .\oceans.ps1 status    Show repository and install status"
+    Write-Host "  .\oceans.ps1 import    Scan local skills and print an import review report"
   }
 }

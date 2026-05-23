@@ -61,6 +61,7 @@ skills/
 .\oceans.ps1 install
 .\oceans.ps1 validate
 .\oceans.ps1 status
+.\oceans.ps1 import
 ```
 
 ### Ubuntu and macOS
@@ -70,6 +71,7 @@ skills/
 ./oceans install
 ./oceans validate
 ./oceans status
+./oceans import
 ```
 
 ## What The Commands Do
@@ -83,6 +85,8 @@ skills/
 `oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, and third-party attribution files.
 
 `oceans.ps1 status` and `./oceans status` show Git status, submodule status, and local install target information.
+
+`oceans.ps1 import` and `./oceans import` scan your local Codex skills and print a review report for deciding what can be moved into oceans777 repositories. The import command is report-only: it does not copy files, delete files, commit, or push.
 
 ## Repository Layout
 
@@ -105,6 +109,8 @@ skills/
     validate-skills.sh
     status.ps1
     status.sh
+    import-skills.ps1
+    import-skills.sh
   docs/
 ```
 
@@ -129,6 +135,55 @@ $HOME/.codex/skills
 ```
 
 The installer does not delete local private skills.
+
+## Review Local Skills For Import
+
+Use this before moving local skills into GitHub:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import
+```
+
+To scan a different skills directory:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import -SourceRoot "C:\path\to\skills"
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import --source-root "$HOME/.codex/skills"
+```
+
+The report classifies local skills as:
+
+```text
+skip-system         -> do not publish Codex system skills
+missing-skill-md    -> repair before import
+already-managed     -> already has an oceans777 source marker
+review-source       -> choose oceans-skills, community-skills, or do not publish
+```
+
+For `review-source` items, use this rule:
+
+```text
+Created by oceans777        -> repos/oceans-skills/skills/<skill-name>/
+Forked or adapted from other authors -> repos/community-skills/skills/<skill-name>/
+Private or source unclear   -> do not publish yet
+```
+
+The report also flags secret-like text and local absolute paths so you can review them before publishing.
 
 ## Add A First-Party Skill
 

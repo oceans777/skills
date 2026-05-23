@@ -69,6 +69,7 @@ Both approaches can result in all repositories being present locally. The setup 
 .\oceans.ps1 install
 .\oceans.ps1 validate
 .\oceans.ps1 status
+.\oceans.ps1 import
 ```
 
 ### Ubuntu and macOS
@@ -78,6 +79,7 @@ Both approaches can result in all repositories being present locally. The setup 
 ./oceans install
 ./oceans validate
 ./oceans status
+./oceans import
 ```
 
 ## Command Reference
@@ -89,5 +91,46 @@ Both approaches can result in all repositories being present locally. The setup 
 `validate` checks skill structure, required files, and third-party attribution.
 
 `status` prints repository state, submodule state, and install target state.
+
+`import` scans local Codex skills and prints a review-only classification report. It never copies, deletes, commits, or pushes files.
+
+## Import Review
+
+Default local scan:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import
+```
+
+Custom source directory:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import -SourceRoot "C:\path\to\skills"
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import --source-root "$HOME/.codex/skills"
+```
+
+Report statuses:
+
+```text
+skip-system         -> do not publish Codex system skills
+missing-skill-md    -> repair before import
+already-managed     -> already has an oceans777 source marker
+review-source       -> choose oceans-skills, community-skills, or do not publish
+```
 
 `help` prints available commands.
