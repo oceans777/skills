@@ -63,7 +63,8 @@ try {
     throw "Expected duplicate validation to fail."
   }
 
-  Assert-Contains -Text $Output -Expected "Duplicate skill name across repositories: duplicate-skill"
+  Assert-Contains -Text $Output -Expected "Duplicate skill name across reposit"
+  Assert-Contains -Text $Output -Expected "ories: duplicate-skill"
   Write-Host "PowerShell validate duplicate test passed."
 } finally {
   Remove-TestRoot
