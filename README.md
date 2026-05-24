@@ -2,7 +2,7 @@
 
 This is the entry repository for all public oceans777 skills.
 
-You only need to clone this repository. It connects to the first-party and community skill repositories, installs skills into your local Codex skill directory, and gives you one command entry point for future updates.
+You only need to clone this repository. It connects to the first-party and community skill repositories, installs skills into local agent skill directories, and gives you one command entry point for future updates.
 
 ## Quick Start
 
@@ -82,13 +82,13 @@ Normal users only need setup plus these daily commands. `import` is a report for
 
 `oceans.ps1 sync` and `./oceans sync` pull the entry repository and update child repositories to the versions pinned by this repository.
 
-`oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker.
+`oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory by default. You can target another runtime with `-Runtime` / `--runtime`, or install to every existing known runtime with `-AllExistingRuntimes` / `--all-existing-runtimes`. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker.
 
 `oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, third-party attribution files, and cross-repository skill name uniqueness.
 
 `oceans.ps1 status` and `./oceans status` show Git status, submodule status, and local install target information.
 
-`oceans.ps1 import` and `./oceans import` scan your local Codex skills and print a review report for deciding what can be moved into oceans777 repositories. The import command is report-only: it does not copy files, delete files, commit, or push.
+`oceans.ps1 import` and `./oceans import` scan existing local skill roots for Codex, agents, Claude, OpenClaw, and Hermes, then print a review report for deciding what can be moved into oceans777 repositories. The import command is report-only: it does not copy files, delete files, commit, or push.
 
 ## Maintainer Skill Publishing
 
@@ -114,12 +114,14 @@ Windows:
 
 ```powershell
 .\oceans.ps1 stage -SourceRoot "$HOME/.codex/skills" -Skill frontend-design -Target oceans
+.\oceans.ps1 stage -Runtime agents -Skill discuz-x5 -Target oceans
 ```
 
 Ubuntu and macOS:
 
 ```sh
 ./oceans stage --source-root "$HOME/.codex/skills" --skill frontend-design --target oceans
+./oceans stage --runtime agents --skill discuz-x5 --target oceans
 ```
 
 Publish after validation and review:
@@ -188,21 +190,49 @@ skills/
 
 Skill folder names must be unique across both repositories. The local install directory is flat, so `repos/oceans-skills/skills/example/` and `repos/community-skills/skills/example/` would collide during installation. `validate` rejects cross-repository duplicates before they can be published.
 
-## Install Location
+## Runtime Skill Roots
 
-Skills are installed into:
-
-```text
-CODEX_HOME/skills
-```
-
-If `CODEX_HOME` is not set, skills are installed into:
+The root registry recognizes these local runtime skill directories:
 
 ```text
-$HOME/.codex/skills
+codex    -> CODEX_HOME/skills or $HOME/.codex/skills
+agents   -> AGENTS_HOME/skills or $HOME/.agents/skills
+claude   -> CLAUDE_HOME/skills or $HOME/.claude/skills
+openclaw -> OPENCLAW_HOME/skills or $HOME/.openclaw/skills or $HOME/.config/openclaw/skills
+hermes   -> HERMES_HOME/skills or $HOME/.hermes/skills or $HOME/.config/hermes/skills
 ```
 
-The installer does not delete local private skills.
+Default setup and install are conservative: they install into Codex only.
+
+Install into a specific runtime:
+
+Windows:
+
+```powershell
+.\oceans.ps1 install -Runtime claude
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans install --runtime claude
+```
+
+Install into every runtime root that already exists:
+
+Windows:
+
+```powershell
+.\oceans.ps1 install -AllExistingRuntimes
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans install --all-existing-runtimes
+```
+
+The installer does not delete local private skills and does not create missing non-Codex runtime directories unless you explicitly target that runtime.
 
 ## Local-First Duplicate Policy
 
@@ -232,12 +262,14 @@ Windows:
 
 ```powershell
 .\oceans.ps1 import
+.\oceans.ps1 import -Runtime claude
 ```
 
 Ubuntu and macOS:
 
 ```sh
 ./oceans import
+./oceans import --runtime claude
 ```
 
 To scan a different skills directory:
@@ -261,6 +293,7 @@ skip-system         -> do not publish Codex system skills
 missing-skill-md    -> repair before import
 already-managed     -> already has an oceans777 source marker
 duplicate-local-wins -> local skill matches a repository skill, but the local copy wins
+duplicate-local-runtime -> the same local skill name exists in more than one runtime root
 review-source       -> choose oceans-skills, community-skills, or do not publish
 ```
 
@@ -268,6 +301,7 @@ When a local skill name already exists in the repository, the report includes:
 
 ```text
 repository_match: oceans-skills or community-skills
+local_runtime_match: codex, agents, claude, openclaw, or hermes
 action: keep local skill; repository version will not overwrite it
 ```
 

@@ -88,13 +88,13 @@ Normal users only need setup plus these commands. `import` is a report-only revi
 
 `sync` updates the entry repository and checks out child repositories at the versions pinned by the entry repository.
 
-`install` installs skills into the local Codex skills directory. Local unmanaged skills always win and are not overwritten by repository skills with the same name.
+`install` installs skills into the local Codex skills directory by default. Use `-Runtime` / `--runtime` for a specific runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` for every existing known runtime root. Local unmanaged skills always win and are not overwritten by repository skills with the same name.
 
 `validate` checks skill structure, required files, and third-party attribution.
 
 `status` prints repository state, submodule state, and install target state.
 
-`import` scans local Codex skills and prints a review-only classification report. It never copies, deletes, commits, or pushes files.
+`import` scans existing Codex, agents, Claude, OpenClaw, and Hermes skill roots and prints a review-only classification report. It never copies, deletes, commits, or pushes files.
 
 ## Maintainer Publishing Flow
 
@@ -120,12 +120,14 @@ Windows:
 
 ```powershell
 .\oceans.ps1 stage -SourceRoot "$HOME/.codex/skills" -Skill frontend-design -Target oceans
+.\oceans.ps1 stage -Runtime agents -Skill discuz-x5 -Target oceans
 ```
 
 Ubuntu and macOS:
 
 ```sh
 ./oceans stage --source-root "$HOME/.codex/skills" --skill frontend-design --target oceans
+./oceans stage --runtime agents --skill discuz-x5 --target oceans
 ```
 
 Publish staged changes:
@@ -185,6 +187,20 @@ Ubuntu and macOS:
 ./oceans import
 ```
 
+Specific runtime scan:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import -Runtime claude
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import --runtime claude
+```
+
 Custom source directory:
 
 Windows:
@@ -206,6 +222,7 @@ skip-system         -> do not publish Codex system skills
 missing-skill-md    -> repair before import
 already-managed     -> already has an oceans777 source marker
 duplicate-local-wins -> local skill matches a repository skill, but the local copy wins
+duplicate-local-runtime -> the same local skill name exists in more than one runtime root
 review-source       -> choose oceans-skills, community-skills, or do not publish
 ```
 
@@ -213,7 +230,26 @@ Duplicate report fields:
 
 ```text
 repository_match: oceans-skills or community-skills
+local_runtime_match: codex, agents, claude, openclaw, or hermes
 action: keep local skill; repository version will not overwrite it
+```
+
+## Runtime Install Examples
+
+Windows:
+
+```powershell
+.\oceans.ps1 install
+.\oceans.ps1 install -Runtime claude
+.\oceans.ps1 install -AllExistingRuntimes
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans install
+./oceans install --runtime claude
+./oceans install --all-existing-runtimes
 ```
 
 `help` prints available commands.
