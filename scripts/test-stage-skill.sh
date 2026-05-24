@@ -173,6 +173,39 @@ assert_contains "$OUTPUT" "risk_status: none detected"
 assert_path_exists "$FIRST_PARTY_ROOT/good-skill/SKILL.md"
 assert_path_missing "$FIRST_PARTY_ROOT/good-skill/.oceans-skill-source"
 
+new_fixture runtime-source
+AGENTS_HOME=$FIXTURE_ROOT/agents-home
+export AGENTS_HOME
+mkdir -p "$AGENTS_HOME/skills/agents-skill"
+cat > "$AGENTS_HOME/skills/agents-skill/SKILL.md" <<'EOF'
+---
+name: agents-skill
+description: Agents runtime skill.
+---
+EOF
+OUTPUT=$(sh "$REPO_ROOT/scripts/stage-skill.sh" \
+  --runtime agents \
+  --skill agents-skill \
+  --target oceans \
+  --first-party-skills-root "$FIRST_PARTY_ROOT" \
+  --community-skills-root "$COMMUNITY_ROOT")
+assert_contains "$OUTPUT" "staged-skill: agents-skill"
+assert_path_exists "$FIRST_PARTY_ROOT/agents-skill/SKILL.md"
+
+new_fixture source-root-wins
+AGENTS_HOME=$FIXTURE_ROOT/agents-home
+export AGENTS_HOME
+mkdir -p "$AGENTS_HOME/skills"
+OUTPUT=$(sh "$REPO_ROOT/scripts/stage-skill.sh" \
+  --source-root "$SOURCE_ROOT" \
+  --runtime agents \
+  --skill good-skill \
+  --target oceans \
+  --first-party-skills-root "$FIRST_PARTY_ROOT" \
+  --community-skills-root "$COMMUNITY_ROOT")
+assert_contains "$OUTPUT" "staged-skill: good-skill"
+assert_path_exists "$FIRST_PARTY_ROOT/good-skill/SKILL.md"
+
 new_fixture system-rejected
 mkdir -p "$SOURCE_ROOT/.system"
 cat > "$SOURCE_ROOT/.system/SKILL.md" <<'EOF'

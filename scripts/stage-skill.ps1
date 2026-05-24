@@ -1,5 +1,7 @@
 param(
   [string] $SourceRoot,
+  [ValidateSet("codex", "agents", "claude", "openclaw", "hermes", "custom")]
+  [string] $Runtime = "codex",
   [Parameter(Mandatory = $true)] [string] $Skill,
   [Parameter(Mandatory = $true)] [ValidateSet("oceans", "community")] [string] $Target,
   [string] $FirstPartySkillsRoot,
@@ -16,7 +18,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = Split-Path -Parent $ScriptRoot
+$RequestedSourceRoot = $SourceRoot
+$RequestedRuntime = $Runtime
+. (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
+$SourceRoot = $RequestedSourceRoot
+$Runtime = $RequestedRuntime
 $ExcludedNames = @(".git", ".oceans-skill-source", ".DS_Store", "Thumbs.db", ".pytest_cache", "__pycache__", "node_modules")
 
 function Resolve-DefaultSourceRoot {
@@ -24,11 +32,7 @@ function Resolve-DefaultSourceRoot {
     return $SourceRoot
   }
 
-  if ($env:CODEX_HOME) {
-    return (Join-Path $env:CODEX_HOME "skills")
-  }
-
-  return (Join-Path $HOME ".codex\skills")
+  return (Get-OceansRuntimeRoot -Runtime $Runtime -Operation "stage").Path
 }
 
 function Test-SkillName {

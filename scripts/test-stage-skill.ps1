@@ -194,6 +194,51 @@ try {
   Assert-PathExists -Path (Join-Path $Fixture.FirstPartyRoot "good-skill\SKILL.md")
   Assert-PathMissing -Path (Join-Path $Fixture.FirstPartyRoot "good-skill\.oceans-skill-source")
 
+  $Fixture = New-Fixture -Name "runtime-source"
+  $AgentsHome = Join-Path $Fixture.Root "agents-home"
+  $AgentsSkillRoot = Join-Path $AgentsHome "skills"
+  New-Item -ItemType Directory -Force -Path (Join-Path $AgentsSkillRoot "agents-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $AgentsSkillRoot "agents-skill\SKILL.md") -Value "---`nname: agents-skill`ndescription: Agents runtime skill.`n---`n" -Encoding UTF8
+  $OldAgentsHome = $env:AGENTS_HOME
+  try {
+    $env:AGENTS_HOME = $AgentsHome
+    $Output = & "$RepoRoot\scripts\stage-skill.ps1" `
+      -Runtime "agents" `
+      -Skill "agents-skill" `
+      -Target "oceans" `
+      -FirstPartySkillsRoot $Fixture.FirstPartyRoot `
+      -CommunitySkillsRoot $Fixture.CommunityRoot *>&1 | Out-String
+  } finally {
+    if ($null -eq $OldAgentsHome) { Remove-Item Env:\AGENTS_HOME -ErrorAction SilentlyContinue } else { $env:AGENTS_HOME = $OldAgentsHome }
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "Expected runtime stage to pass. Output:`n$Output"
+  }
+  Assert-Contains -Text $Output -Expected "staged-skill: agents-skill"
+  Assert-PathExists -Path (Join-Path $Fixture.FirstPartyRoot "agents-skill\SKILL.md")
+
+  $Fixture = New-Fixture -Name "source-root-wins"
+  $AgentsHome = Join-Path $Fixture.Root "agents-home"
+  New-Item -ItemType Directory -Force -Path (Join-Path $AgentsHome "skills") | Out-Null
+  $OldAgentsHome = $env:AGENTS_HOME
+  try {
+    $env:AGENTS_HOME = $AgentsHome
+    $Output = & "$RepoRoot\scripts\stage-skill.ps1" `
+      -SourceRoot $Fixture.SourceRoot `
+      -Runtime "agents" `
+      -Skill "good-skill" `
+      -Target "oceans" `
+      -FirstPartySkillsRoot $Fixture.FirstPartyRoot `
+      -CommunitySkillsRoot $Fixture.CommunityRoot *>&1 | Out-String
+  } finally {
+    if ($null -eq $OldAgentsHome) { Remove-Item Env:\AGENTS_HOME -ErrorAction SilentlyContinue } else { $env:AGENTS_HOME = $OldAgentsHome }
+  }
+  if ($LASTEXITCODE -ne 0) {
+    throw "Expected SourceRoot override stage to pass. Output:`n$Output"
+  }
+  Assert-Contains -Text $Output -Expected "staged-skill: good-skill"
+  Assert-PathExists -Path (Join-Path $Fixture.FirstPartyRoot "good-skill\SKILL.md")
+
   $Fixture = New-Fixture -Name "system-rejected"
   New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot ".system") | Out-Null
   Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot ".system\SKILL.md") -Value "---`nname: system`ndescription: System skill.`n---`n" -Encoding UTF8

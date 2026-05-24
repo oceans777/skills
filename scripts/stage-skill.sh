@@ -3,8 +3,10 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
+SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 
-SOURCE_ROOT=${CODEX_HOME:+$CODEX_HOME/skills}
+SOURCE_ROOT=
+RUNTIME=codex
 FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 SKILL=
@@ -17,10 +19,6 @@ UPSTREAM_AUTHOR=
 UPSTREAM_LICENSE=
 LICENSE_FILE=
 PATCH_SUMMARY=
-
-if [ -z "${SOURCE_ROOT:-}" ]; then
-  SOURCE_ROOT=$HOME/.codex/skills
-fi
 
 need_value() {
   option=$1
@@ -35,6 +33,11 @@ while [ "$#" -gt 0 ]; do
     --source-root)
       need_value "$1" "${2:-}"
       SOURCE_ROOT=$2
+      shift 2
+      ;;
+    --runtime)
+      need_value "$1" "${2:-}"
+      RUNTIME=$2
       shift 2
       ;;
     --skill)
@@ -143,6 +146,39 @@ case "$TARGET" in
     TARGET_REPOSITORY=community-skills
     ;;
 esac
+
+if [ -z "$SOURCE_ROOT" ]; then
+  case "$RUNTIME" in
+    codex|agents|claude|openclaw|hermes|custom)
+      ;;
+    *)
+      echo "Unsupported runtime: $RUNTIME" >&2
+      exit 2
+      ;;
+  esac
+
+  if [ "$RUNTIME" = "custom" ]; then
+    echo "custom-runtime-requires-path" >&2
+    exit 1
+  fi
+
+  candidates=$(runtime_candidates "$RUNTIME")
+  while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    candidate_real=$(absolute_path "$candidate")
+    if [ -d "$candidate_real" ]; then
+      SOURCE_ROOT=$candidate_real
+      break
+    fi
+  done <<EOF
+$candidates
+EOF
+
+  if [ -z "$SOURCE_ROOT" ]; then
+    echo "skill-root-missing: $RUNTIME" >&2
+    exit 1
+  fi
+fi
 
 TARGET_REPO=$(CDPATH= cd "$TARGET_ROOT/.." && pwd -P)
 

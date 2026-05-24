@@ -4,6 +4,7 @@ param(
   [string] $Command = "help",
 
   [string] $SourceRoot,
+  [ValidateSet("codex", "agents", "claude", "openclaw", "hermes", "custom")] [string] $Runtime,
   [string] $Skill,
   [ValidateSet("oceans", "community")] [string] $Target,
   [switch] $AllowRisk,
@@ -42,6 +43,7 @@ switch ($Command) {
   "stage" {
     $StageArgs = @{}
     if ($SourceRoot) { $StageArgs.SourceRoot = $SourceRoot }
+    if ($Runtime) { $StageArgs.Runtime = $Runtime }
     if ($Skill) { $StageArgs.Skill = $Skill }
     if ($Target) { $StageArgs.Target = $Target }
     if ($AllowRisk) { $StageArgs.AllowRisk = $true }
