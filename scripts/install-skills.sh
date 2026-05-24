@@ -115,8 +115,9 @@ EOF
 if [ -n "$INSTALL_ROOT" ]; then
   add_install_target custom "$INSTALL_ROOT" 1
 elif [ "$ALL_EXISTING_RUNTIMES" -eq 1 ]; then
-  for known_runtime in codex agents claude openclaw hermes; do
-    add_first_existing_runtime_target "$known_runtime" 0
+  list_existing_root_records | while IFS='|' read -r known_runtime known_root; do
+    [ -n "$known_runtime" ] || continue
+    add_install_target "$known_runtime" "$known_root" 0
   done
 else
   add_first_existing_runtime_target "$RUNTIME" 1

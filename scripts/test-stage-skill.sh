@@ -293,6 +293,20 @@ if ln -s "$FIXTURE_ROOT/external-secret.txt" "$SOURCE_ROOT/symlink-skill/secret-
   OUTPUT=$(run_stage_failure_common symlink-skill oceans --allow-risk)
   assert_contains "$OUTPUT" "unsupported-symlink: symlink-skill"
   assert_path_missing "$FIRST_PARTY_ROOT/symlink-skill/secret-link.txt"
+
+  new_fixture excluded-symlink
+  mkdir -p "$SOURCE_ROOT/excluded-link-skill/node_modules"
+  cat > "$SOURCE_ROOT/excluded-link-skill/SKILL.md" <<'EOF'
+---
+name: excluded-link-skill
+description: Excluded symlink skill.
+---
+EOF
+  ln -s "$FIXTURE_ROOT/external-secret.txt" "$SOURCE_ROOT/excluded-link-skill/node_modules/external-link.txt"
+  OUTPUT=$(run_stage_success_common excluded-link-skill oceans)
+  assert_contains "$OUTPUT" "staged-skill: excluded-link-skill"
+  assert_path_exists "$FIRST_PARTY_ROOT/excluded-link-skill/SKILL.md"
+  assert_path_missing "$FIRST_PARTY_ROOT/excluded-link-skill/node_modules/external-link.txt"
 else
   echo "Skipping symlink stage test: symbolic links are not available in this environment."
 fi

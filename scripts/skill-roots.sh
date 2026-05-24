@@ -111,29 +111,6 @@ $resolved"
   done
 }
 
-first_runtime_root() {
-  runtime=$1
-  create=${2:-0}
-
-  if [ "$runtime" = "custom" ]; then
-    echo "custom-runtime-requires-path" >&2
-    return 1
-  fi
-
-  first=
-  runtime_candidates "$runtime" | while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
-    resolved=$(absolute_path "$candidate")
-    if [ -z "$first" ]; then
-      first=$resolved
-    fi
-    if [ -d "$resolved" ]; then
-      print_root_record "$runtime" exists "$resolved" "runtime skills root exists"
-      exit 0
-    fi
-  done
-}
-
 resolve_runtime_root() {
   runtime=$1
   explicit_path=$2
@@ -189,19 +166,38 @@ EOF
 }
 
 list_existing_roots() {
+  list_existing_root_records | while IFS='|' read -r runtime resolved; do
+    [ -n "$runtime" ] || continue
+    print_root_record "$runtime" exists "$resolved" "runtime skills root exists"
+    echo
+  done
+}
+
+list_existing_root_records() {
   for runtime in codex agents claude openclaw hermes; do
+    seen=
     candidates=$(runtime_candidates "$runtime")
     while IFS= read -r candidate; do
       [ -n "$candidate" ] || continue
       resolved=$(absolute_path "$candidate")
+      case "
+$seen
+" in
+        *"
+$resolved
+"*)
+          continue
+          ;;
+      esac
+      seen="${seen}
+$resolved"
       if [ -d "$resolved" ]; then
-        print_root_record "$runtime" exists "$resolved" "runtime skills root exists"
-        echo
-        break
+        printf '%s|%s\n' "$runtime" "$resolved"
       fi
     done <<EOF
 $candidates
 EOF
+    true
   done
 }
 

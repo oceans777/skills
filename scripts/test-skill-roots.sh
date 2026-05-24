@@ -92,6 +92,17 @@ assert_contains "$OUTPUT" "runtime: claude"
 assert_contains "$OUTPUT" "runtime: openclaw"
 assert_contains "$OUTPUT" "runtime: hermes"
 
+HOME=$SANDBOX_ROOT/fallback-home
+export HOME
+unset OPENCLAW_HOME HERMES_HOME
+mkdir -p "$HOME/.openclaw/skills" "$HOME/.config/openclaw/skills"
+mkdir -p "$HOME/.hermes/skills" "$HOME/.config/hermes/skills"
+OUTPUT=$(run_roots_success --mode install-all-existing)
+assert_contains "$OUTPUT" "path: $HOME/.openclaw/skills"
+assert_contains "$OUTPUT" "path: $HOME/.config/openclaw/skills"
+assert_contains "$OUTPUT" "path: $HOME/.hermes/skills"
+assert_contains "$OUTPUT" "path: $HOME/.config/hermes/skills"
+
 OUTPUT=$(run_roots_success --mode stage --runtime agents)
 assert_contains "$OUTPUT" "runtime: agents"
 assert_contains "$OUTPUT" "path: $AGENTS_HOME/skills"

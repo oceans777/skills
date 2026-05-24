@@ -254,14 +254,18 @@ is_excluded_path() {
   return 1
 }
 
-SYMLINK_LIST=$(find "$SOURCE_SKILL" -type l -print)
-if [ -n "$SYMLINK_LIST" ]; then
-  echo "unsupported-symlink: $SKILL"
-  printf '%s\n' "$SYMLINK_LIST" | while IFS= read -r link_path; do
+UNSUPPORTED_SYMLINK_LIST=$(
+  find "$SOURCE_SKILL" -type l -print | while IFS= read -r link_path; do
     rel=${link_path#"$SOURCE_SKILL"/}
     if is_excluded_path "$rel"; then
       continue
     fi
+    printf '%s\n' "$rel"
+  done
+)
+if [ -n "$UNSUPPORTED_SYMLINK_LIST" ]; then
+  echo "unsupported-symlink: $SKILL"
+  printf '%s\n' "$UNSUPPORTED_SYMLINK_LIST" | while IFS= read -r rel; do
     echo "unsupported-symlink-path: $rel"
   done
   exit 1

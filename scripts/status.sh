@@ -139,25 +139,17 @@ echo "Runtime skill roots:"
 if [ -n "$RUNTIME" ]; then
   print_status_for_runtime "$RUNTIME" 0
 elif [ "$ALL_EXISTING_RUNTIMES" -eq 1 ]; then
-  any_existing=0
-  for runtime_name in codex agents claude openclaw hermes; do
-    candidates=$(runtime_candidates "$runtime_name")
-    while IFS= read -r candidate; do
-      [ -n "$candidate" ] || continue
-      resolved=$(absolute_path "$candidate")
-      if [ -d "$resolved" ]; then
-        print_status_root "$runtime_name" exists "$resolved" "runtime skills root exists"
-        echo
-        any_existing=1
-        break
-      fi
-    done <<EOF
-$candidates
-EOF
-    true
-  done
-  if [ "$any_existing" -eq 0 ]; then
+  existing_root_records=$(list_existing_root_records)
+  if [ -z "$existing_root_records" ]; then
     echo "  No existing runtime skill roots found."
+  else
+    while IFS='|' read -r runtime_name resolved; do
+      [ -n "$runtime_name" ] || continue
+      print_status_root "$runtime_name" exists "$resolved" "runtime skills root exists"
+      echo
+    done <<EOF
+$existing_root_records
+EOF
   fi
 else
   for runtime_name in codex agents claude openclaw hermes; do

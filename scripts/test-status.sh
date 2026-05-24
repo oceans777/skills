@@ -75,6 +75,14 @@ assert_contains "$OUTPUT" "runtime: codex"
 assert_contains "$OUTPUT" "runtime: claude"
 assert_not_contains "$OUTPUT" "path: $AGENTS_HOME/skills"
 
+HOME=$SANDBOX_ROOT/fallback-home
+export HOME
+unset OPENCLAW_HOME HERMES_HOME
+mkdir -p "$HOME/.openclaw/skills" "$HOME/.config/openclaw/skills"
+OUTPUT=$(sh "$SCRIPT_PATH" --all-existing-runtimes)
+assert_contains "$OUTPUT" "path: $HOME/.openclaw/skills"
+assert_contains "$OUTPUT" "path: $HOME/.config/openclaw/skills"
+
 OUTPUT=$(sh "$WRAPPER_PATH" status --runtime claude)
 assert_contains "$OUTPUT" "runtime: claude"
 assert_contains "$OUTPUT" "path: $CLAUDE_HOME/skills"

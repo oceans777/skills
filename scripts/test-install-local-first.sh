@@ -107,8 +107,11 @@ assert_file_contains "$CLAUDE_INSTALL_ROOT/managed-update-test/.oceans-skill-sou
 CODEX_HOME=$TEST_ROOT/codex-home
 AGENTS_HOME=$TEST_ROOT/agents-home
 CLAUDE_HOME=$TEST_ROOT/claude-existing-home
-export CODEX_HOME AGENTS_HOME CLAUDE_HOME
+HOME=$TEST_ROOT/fallback-home
+export CODEX_HOME AGENTS_HOME CLAUDE_HOME HOME
+unset OPENCLAW_HOME HERMES_HOME
 mkdir -p "$CODEX_HOME/skills" "$AGENTS_HOME/skills" "$CLAUDE_HOME/skills"
+mkdir -p "$HOME/.openclaw/skills" "$HOME/.config/openclaw/skills"
 OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" \
   --all-existing-runtimes \
   --first-party-root "$FIRST_PARTY_ROOT" \
@@ -116,8 +119,12 @@ OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" \
 assert_contains "$OUTPUT" "Install root: $CODEX_HOME/skills"
 assert_contains "$OUTPUT" "Install root: $AGENTS_HOME/skills"
 assert_contains "$OUTPUT" "Install root: $CLAUDE_HOME/skills"
+assert_contains "$OUTPUT" "Install root: $HOME/.openclaw/skills"
+assert_contains "$OUTPUT" "Install root: $HOME/.config/openclaw/skills"
 assert_path_exists "$CODEX_HOME/skills/managed-update-test/SKILL.md"
 assert_path_exists "$AGENTS_HOME/skills/managed-update-test/SKILL.md"
 assert_path_exists "$CLAUDE_HOME/skills/managed-update-test/SKILL.md"
+assert_path_exists "$HOME/.openclaw/skills/managed-update-test/SKILL.md"
+assert_path_exists "$HOME/.config/openclaw/skills/managed-update-test/SKILL.md"
 
 echo "Shell install local-first test passed."

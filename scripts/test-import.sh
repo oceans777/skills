@@ -128,4 +128,30 @@ assert_contains "$OUTPUT" "shared-runtime-skill"
 assert_contains "$OUTPUT" "status: duplicate-local-runtime"
 assert_contains "$OUTPUT" "local_runtime_match: agents, claude"
 
+HOME=$SANDBOX_ROOT/fallback-home
+export HOME
+unset OPENCLAW_HOME HERMES_HOME
+mkdir -p "$HOME/.openclaw/skills/openclaw-home-skill"
+cat > "$HOME/.openclaw/skills/openclaw-home-skill/SKILL.md" <<'EOF'
+---
+name: openclaw-home-skill
+description: OpenClaw home root.
+---
+EOF
+mkdir -p "$HOME/.config/openclaw/skills/openclaw-config-skill"
+cat > "$HOME/.config/openclaw/skills/openclaw-config-skill/SKILL.md" <<'EOF'
+---
+name: openclaw-config-skill
+description: OpenClaw config root.
+---
+EOF
+
+OUTPUT=$(sh "$REPO_ROOT/scripts/import-skills.sh" \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT")
+assert_contains "$OUTPUT" "source_root: $HOME/.openclaw/skills"
+assert_contains "$OUTPUT" "source_root: $HOME/.config/openclaw/skills"
+assert_contains "$OUTPUT" "openclaw-home-skill"
+assert_contains "$OUTPUT" "openclaw-config-skill"
+
 echo "Shell import test passed."

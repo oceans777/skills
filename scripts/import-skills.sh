@@ -108,8 +108,9 @@ if [ -n "$SOURCE_ROOT" ]; then
 elif [ -n "$RUNTIME" ]; then
   add_first_existing_runtime_root "$RUNTIME"
 else
-  for known_runtime in codex agents claude openclaw hermes; do
-    add_first_existing_runtime_root "$known_runtime"
+  list_existing_root_records | while IFS='|' read -r known_runtime known_root; do
+    [ -n "$known_runtime" ] || continue
+    add_scan_root "$known_runtime" "$known_root"
   done
 fi
 
