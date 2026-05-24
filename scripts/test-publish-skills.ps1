@@ -374,6 +374,40 @@ function Assert-PublishedChildAndEntry {
   Assert-GitClean -RepoPath $Fixture.EntryRepo
 }
 
+function Assert-ResumedAheadChildAndEntry {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object] $Fixture,
+
+    [Parameter(Mandatory = $true)]
+    [string] $ChildRepo,
+
+    [Parameter(Mandatory = $true)]
+    [string] $SubmodulePath,
+
+    [Parameter(Mandatory = $true)]
+    [string] $AheadChildHead,
+
+    [Parameter(Mandatory = $true)]
+    [string] $OldEntryHead,
+
+    [Parameter(Mandatory = $true)]
+    [string] $Output
+  )
+
+  $NewEntryHead = Get-Head -RepoPath $Fixture.EntryRepo
+  Assert-Equal -Actual (Get-Head -RepoPath $ChildRepo) -Expected $AheadChildHead -Message "Expected child HEAD to remain at the already-created commit."
+  Assert-Equal -Actual (Get-RemoteMain -RepoPath $ChildRepo) -Expected $AheadChildHead -Message "Expected interrupted child commit to be pushed on rerun."
+  Assert-NotEqual -Actual $NewEntryHead -Unexpected $OldEntryHead -Message "Expected entry repository to receive a submodule pointer commit on rerun."
+  Assert-Equal -Actual (Get-RemoteMain -RepoPath $Fixture.EntryRepo) -Expected $NewEntryHead -Message "Expected entry rerun commit to be pushed."
+  Assert-Equal -Actual (Get-SubmodulePointer -EntryRepo $Fixture.EntryRepo -SubmodulePath $SubmodulePath) -Expected $AheadChildHead -Message "Expected entry submodule pointer to reference ahead child HEAD."
+  if ($Output -match "publish-no-changes") {
+    throw "Interrupted publish rerun must not print publish-no-changes."
+  }
+  Assert-GitClean -RepoPath $ChildRepo
+  Assert-GitClean -RepoPath $Fixture.EntryRepo
+}
+
 try {
   $Fixture = New-Fixture -Name "no-child-changes"
   $EntryHead = Get-Head -RepoPath $Fixture.EntryRepo
@@ -390,6 +424,17 @@ try {
   $ChildHead = Get-Head -RepoPath $Fixture.FirstPartyRepo
   Invoke-Publish -Fixture $Fixture | Out-Null
   Assert-PublishedChildAndEntry -Fixture $Fixture -ChildRepo $Fixture.FirstPartyRepo -SubmodulePath "repos/oceans-skills" -OldChildHead $ChildHead -OldEntryHead $EntryHead
+
+  $Fixture = New-Fixture -Name "resume-ahead-first-party-child"
+  Add-FirstPartySkillChange -Fixture $Fixture -SkillName "ahead-ocean-skill"
+  Invoke-Git -RepoPath $Fixture.FirstPartyRepo -Arguments @("add", "skills") | Out-Null
+  Invoke-Git -RepoPath $Fixture.FirstPartyRepo -Arguments @("commit", "-m", "skills: publish staged first-party skills") | Out-Null
+  $EntryHead = Get-Head -RepoPath $Fixture.EntryRepo
+  $AheadChildHead = Get-Head -RepoPath $Fixture.FirstPartyRepo
+  $ChildRemoteHead = Get-RemoteMain -RepoPath $Fixture.FirstPartyRepo
+  Assert-NotEqual -Actual $AheadChildHead -Unexpected $ChildRemoteHead -Message "Fixture should leave child repo ahead of origin/main."
+  $Output = Invoke-Publish -Fixture $Fixture
+  Assert-ResumedAheadChildAndEntry -Fixture $Fixture -ChildRepo $Fixture.FirstPartyRepo -SubmodulePath "repos/oceans-skills" -AheadChildHead $AheadChildHead -OldEntryHead $EntryHead -Output $Output
 
   $Fixture = New-Fixture -Name "community-child-change"
   Add-CommunitySkillChange -Fixture $Fixture

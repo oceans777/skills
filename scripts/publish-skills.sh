@@ -133,19 +133,35 @@ assert_repo_clean_outside_paths() {
   repo=$1
   name=$2
   shift 2
-  allowed_roots=$*
 
-  set -- status --porcelain --untracked-files=all -- .
-  for allowed_root in $allowed_roots; do
-    normalized=$(printf '%s' "$allowed_root" | sed 's|\\|/|g; s|/*$||')
-    set -- "$@" ":(exclude)$normalized"
+  status=$(git -C "$repo" status --porcelain --untracked-files=all)
+  [ -n "$status" ] || return 0
+
+  old_ifs=$IFS
+  IFS='
+'
+  for line in $status; do
+    path=$(printf '%s' "$line" | cut -c4-)
+    case "$path" in
+      *" -> "*)
+        old_path=${path%% -> *}
+        new_path=${path##* -> }
+        if ! is_allowed_path "$old_path" "$@" || ! is_allowed_path "$new_path" "$@"; then
+          IFS=$old_ifs
+          echo "publish-dirty-outside-allowed-paths: $name"
+          exit 1
+        fi
+        ;;
+      *)
+        if ! is_allowed_path "$path" "$@"; then
+          IFS=$old_ifs
+          echo "publish-dirty-outside-allowed-paths: $name"
+          exit 1
+        fi
+        ;;
+    esac
   done
-
-  status=$(git -C "$repo" "$@")
-  if [ -n "$status" ]; then
-    echo "publish-dirty-outside-allowed-paths: $name"
-    exit 1
-  fi
+  IFS=$old_ifs
 }
 
 repo_has_changes_under_path() {
@@ -176,25 +192,42 @@ staged_changes_under_path() {
   exit "$status"
 }
 
+repo_head_differs_from_origin_main() {
+  repo=$1
+
+  head=$(git -C "$repo" rev-parse HEAD)
+  origin_main=$(git -C "$repo" rev-parse origin/main)
+  [ "$head" != "$origin_main" ]
+}
+
 publish_child_repository() {
   repo=$1
   name=$2
   message=$3
+  has_working_tree_changes=$4
+  is_ahead_of_origin=$5
 
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "dry_run: true"
-    echo "plan-commit-child: $name"
-    echo "plan-push-child: $name"
+    if [ "$has_working_tree_changes" -eq 1 ]; then
+      echo "plan-commit-child: $name"
+    fi
+    if [ "$has_working_tree_changes" -eq 1 ] || [ "$is_ahead_of_origin" -eq 1 ]; then
+      echo "plan-push-child: $name"
+    fi
     return
   fi
 
-  invoke_git "stage $name skills" -C "$repo" add skills
-  if ! staged_changes_under_path "$repo" skills; then
-    return
+  if [ "$has_working_tree_changes" -eq 1 ]; then
+    invoke_git "stage $name skills" -C "$repo" add skills
+    if staged_changes_under_path "$repo" skills; then
+      invoke_git "commit $name skills" -C "$repo" commit -m "$message"
+    fi
   fi
 
-  invoke_git "commit $name skills" -C "$repo" commit -m "$message"
-  invoke_git_with_retry "push $name main" 3 1 -C "$repo" push --quiet origin main
+  if repo_head_differs_from_origin_main "$repo"; then
+    invoke_git_with_retry "push $name main" 3 1 -C "$repo" push --quiet origin main
+  fi
 }
 
 while [ "$#" -gt 0 ]; do
@@ -254,24 +287,43 @@ sh "$SCRIPT_DIR/validate-skills.sh" \
 
 FIRST_PARTY_CHANGED=0
 COMMUNITY_CHANGED=0
+FIRST_PARTY_AHEAD=0
+COMMUNITY_AHEAD=0
+ENTRY_SUBMODULE_CHANGED=0
+ENTRY_AHEAD=0
 if repo_has_changes_under_path "$FIRST_PARTY_REPO" skills; then
   FIRST_PARTY_CHANGED=1
 fi
 if repo_has_changes_under_path "$COMMUNITY_REPO" skills; then
   COMMUNITY_CHANGED=1
 fi
+if repo_head_differs_from_origin_main "$FIRST_PARTY_REPO"; then
+  FIRST_PARTY_AHEAD=1
+fi
+if repo_head_differs_from_origin_main "$COMMUNITY_REPO"; then
+  COMMUNITY_AHEAD=1
+fi
+if repo_has_changes_under_path "$REPO_ROOT" "$FIRST_PARTY_REL" || \
+   repo_has_changes_under_path "$REPO_ROOT" "$COMMUNITY_REL"; then
+  ENTRY_SUBMODULE_CHANGED=1
+fi
+if repo_head_differs_from_origin_main "$REPO_ROOT"; then
+  ENTRY_AHEAD=1
+fi
 
-if [ "$FIRST_PARTY_CHANGED" -eq 0 ] && [ "$COMMUNITY_CHANGED" -eq 0 ]; then
+if [ "$FIRST_PARTY_CHANGED" -eq 0 ] && [ "$COMMUNITY_CHANGED" -eq 0 ] && \
+   [ "$FIRST_PARTY_AHEAD" -eq 0 ] && [ "$COMMUNITY_AHEAD" -eq 0 ] && \
+   [ "$ENTRY_SUBMODULE_CHANGED" -eq 0 ] && [ "$ENTRY_AHEAD" -eq 0 ]; then
   echo "publish-no-changes"
   exit 0
 fi
 
-if [ "$FIRST_PARTY_CHANGED" -eq 1 ]; then
-  publish_child_repository "$FIRST_PARTY_REPO" oceans-skills "skills: publish staged first-party skills"
+if [ "$FIRST_PARTY_CHANGED" -eq 1 ] || [ "$FIRST_PARTY_AHEAD" -eq 1 ]; then
+  publish_child_repository "$FIRST_PARTY_REPO" oceans-skills "skills: publish staged first-party skills" "$FIRST_PARTY_CHANGED" "$FIRST_PARTY_AHEAD"
 fi
 
-if [ "$COMMUNITY_CHANGED" -eq 1 ]; then
-  publish_child_repository "$COMMUNITY_REPO" community-skills "skills: publish staged community skills"
+if [ "$COMMUNITY_CHANGED" -eq 1 ] || [ "$COMMUNITY_AHEAD" -eq 1 ]; then
+  publish_child_repository "$COMMUNITY_REPO" community-skills "skills: publish staged community skills" "$COMMUNITY_CHANGED" "$COMMUNITY_AHEAD"
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -285,5 +337,8 @@ invoke_git "stage skill submodules" -C "$REPO_ROOT" add "$FIRST_PARTY_REL" "$COM
 if staged_changes_under_path "$REPO_ROOT" "$FIRST_PARTY_REL" || \
    staged_changes_under_path "$REPO_ROOT" "$COMMUNITY_REL"; then
   invoke_git "commit skill submodule updates" -C "$REPO_ROOT" commit -m "repos: update skill submodules"
+fi
+
+if repo_head_differs_from_origin_main "$REPO_ROOT"; then
   invoke_git_with_retry "push entry main" 3 1 -C "$REPO_ROOT" push --quiet origin main
 fi

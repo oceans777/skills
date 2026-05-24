@@ -271,6 +271,29 @@ assert_published_child_and_entry() {
   assert_git_clean "$ENTRY_REPO"
 }
 
+assert_resumed_ahead_child_and_entry() {
+  child_repo=$1
+  submodule_path=$2
+  ahead_child_head=$3
+  old_entry_head=$4
+  output=$5
+
+  new_entry_head=$(get_head "$ENTRY_REPO")
+  assert_equal "$(get_head "$child_repo")" "$ahead_child_head" "Expected child HEAD to remain at the already-created commit."
+  assert_equal "$(get_remote_main "$child_repo")" "$ahead_child_head" "Expected interrupted child commit to be pushed on rerun."
+  assert_not_equal "$new_entry_head" "$old_entry_head" "Expected entry repository to receive a submodule pointer commit on rerun."
+  assert_equal "$(get_remote_main "$ENTRY_REPO")" "$new_entry_head" "Expected entry rerun commit to be pushed."
+  assert_equal "$(get_submodule_pointer "$ENTRY_REPO" "$submodule_path")" "$ahead_child_head" "Expected entry submodule pointer to reference ahead child HEAD."
+  case "$output" in
+    *publish-no-changes*)
+      echo "Interrupted publish rerun must not print publish-no-changes." >&2
+      exit 1
+      ;;
+  esac
+  assert_git_clean "$child_repo"
+  assert_git_clean "$ENTRY_REPO"
+}
+
 new_fixture no-child-changes
 ENTRY_HEAD=$(get_head "$ENTRY_REPO")
 FIRST_PARTY_HEAD=$(get_head "$FIRST_PARTY_REPO")
@@ -286,6 +309,17 @@ ENTRY_HEAD=$(get_head "$ENTRY_REPO")
 CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
 run_publish_success >/dev/null
 assert_published_child_and_entry "$FIRST_PARTY_REPO" repos/oceans-skills "$CHILD_HEAD" "$ENTRY_HEAD"
+
+new_fixture resume-ahead-first-party-child
+add_first_party_skill_change ahead-ocean-skill unstage
+git_quiet "$FIRST_PARTY_REPO" add skills
+git_quiet "$FIRST_PARTY_REPO" commit -m "skills: publish staged first-party skills"
+ENTRY_HEAD=$(get_head "$ENTRY_REPO")
+AHEAD_CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
+CHILD_REMOTE_HEAD=$(get_remote_main "$FIRST_PARTY_REPO")
+assert_not_equal "$AHEAD_CHILD_HEAD" "$CHILD_REMOTE_HEAD" "Fixture should leave child repo ahead of origin/main."
+OUTPUT=$(run_publish_success)
+assert_resumed_ahead_child_and_entry "$FIRST_PARTY_REPO" repos/oceans-skills "$AHEAD_CHILD_HEAD" "$ENTRY_HEAD" "$OUTPUT"
 
 new_fixture community-child-change
 add_community_skill_change publish-community-skill valid

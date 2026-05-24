@@ -197,30 +197,47 @@ function Test-StagedChangesUnderPath {
   throw "git diff --cached failed for $Repo."
 }
 
+function Test-RepoHeadDiffersFromOriginMain {
+  param([Parameter(Mandatory = $true)][string] $Repo)
+
+  $Head = Get-GitOutput -Repo $Repo -Arguments @("rev-parse", "HEAD")
+  $OriginMain = Get-GitOutput -Repo $Repo -Arguments @("rev-parse", "origin/main")
+  return ($Head -ne $OriginMain)
+}
+
 function Publish-ChildRepository {
   param(
     [Parameter(Mandatory = $true)][string] $Repo,
     [Parameter(Mandatory = $true)][string] $Name,
-    [Parameter(Mandatory = $true)][string] $Message
+    [Parameter(Mandatory = $true)][string] $Message,
+    [Parameter(Mandatory = $true)][bool] $HasWorkingTreeChanges,
+    [Parameter(Mandatory = $true)][bool] $IsAheadOfOrigin
   )
 
   if ($DryRun) {
     Write-Host "dry_run: true"
-    Write-Host "plan-commit-child: $Name"
-    Write-Host "plan-push-child: $Name"
+    if ($HasWorkingTreeChanges) {
+      Write-Host "plan-commit-child: $Name"
+    }
+    if ($HasWorkingTreeChanges -or $IsAheadOfOrigin) {
+      Write-Host "plan-push-child: $Name"
+    }
     return
   }
 
-  Invoke-Git -Description "stage $Name skills" -Arguments @("-C", $Repo, "add", "skills")
-  if (-not (Test-StagedChangesUnderPath -Repo $Repo -Path "skills")) {
-    return
+  if ($HasWorkingTreeChanges) {
+    Invoke-Git -Description "stage $Name skills" -Arguments @("-C", $Repo, "add", "skills")
+    if (Test-StagedChangesUnderPath -Repo $Repo -Path "skills") {
+      Invoke-Git -Description "commit $Name skills" -Arguments @("-C", $Repo, "commit", "-m", $Message)
+    }
   }
 
-  Invoke-Git -Description "commit $Name skills" -Arguments @("-C", $Repo, "commit", "-m", $Message)
-  Invoke-GitWithRetry `
-    -Description "push $Name main" `
-    -Arguments @("-C", $Repo, "push", "--quiet", "origin", "main") `
-    -DelaySeconds 1
+  if (Test-RepoHeadDiffersFromOriginMain -Repo $Repo) {
+    Invoke-GitWithRetry `
+      -Description "push $Name main" `
+      -Arguments @("-C", $Repo, "push", "--quiet", "origin", "main") `
+      -DelaySeconds 1
+  }
 }
 
 if (-not $RepoRoot) {
@@ -270,24 +287,35 @@ try {
 
 $FirstPartyChanged = Test-RepoHasChangesUnderPath -Repo $FirstPartyRepo -Path "skills"
 $CommunityChanged = Test-RepoHasChangesUnderPath -Repo $CommunityRepo -Path "skills"
+$FirstPartyAhead = Test-RepoHeadDiffersFromOriginMain -Repo $FirstPartyRepo
+$CommunityAhead = Test-RepoHeadDiffersFromOriginMain -Repo $CommunityRepo
+$EntrySubmoduleChanged = (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path $FirstPartyRel) -or
+  (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path $CommunityRel)
+$EntryAhead = Test-RepoHeadDiffersFromOriginMain -Repo $RepoRoot
 
-if (-not $FirstPartyChanged -and -not $CommunityChanged) {
+if (-not $FirstPartyChanged -and -not $CommunityChanged -and
+    -not $FirstPartyAhead -and -not $CommunityAhead -and
+    -not $EntrySubmoduleChanged -and -not $EntryAhead) {
   Write-Host "publish-no-changes"
   exit 0
 }
 
-if ($FirstPartyChanged) {
+if ($FirstPartyChanged -or $FirstPartyAhead) {
   Publish-ChildRepository `
     -Repo $FirstPartyRepo `
     -Name "oceans-skills" `
-    -Message "skills: publish staged first-party skills"
+    -Message "skills: publish staged first-party skills" `
+    -HasWorkingTreeChanges $FirstPartyChanged `
+    -IsAheadOfOrigin $FirstPartyAhead
 }
 
-if ($CommunityChanged) {
+if ($CommunityChanged -or $CommunityAhead) {
   Publish-ChildRepository `
     -Repo $CommunityRepo `
     -Name "community-skills" `
-    -Message "skills: publish staged community skills"
+    -Message "skills: publish staged community skills" `
+    -HasWorkingTreeChanges $CommunityChanged `
+    -IsAheadOfOrigin $CommunityAhead
 }
 
 if ($DryRun) {
@@ -301,6 +329,9 @@ Invoke-Git -Description "stage skill submodules" -Arguments @("-C", $RepoRoot, "
 if ((Test-StagedChangesUnderPath -Repo $RepoRoot -Path $FirstPartyRel) -or
     (Test-StagedChangesUnderPath -Repo $RepoRoot -Path $CommunityRel)) {
   Invoke-Git -Description "commit skill submodule updates" -Arguments @("-C", $RepoRoot, "commit", "-m", "repos: update skill submodules")
+}
+
+if (Test-RepoHeadDiffersFromOriginMain -Repo $RepoRoot) {
   Invoke-GitWithRetry `
     -Description "push entry main" `
     -Arguments @("-C", $RepoRoot, "push", "--quiet", "origin", "main") `
