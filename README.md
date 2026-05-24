@@ -84,11 +84,11 @@ Normal users only need setup plus these daily commands. `import` is a report for
 
 `oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory by default. You can target another runtime with `-Runtime` / `--runtime`, or install to every existing known runtime with `-AllExistingRuntimes` / `--all-existing-runtimes`. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker.
 
-`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, third-party attribution files, and cross-repository skill name uniqueness.
+`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, required `SKILL.md` frontmatter, third-party attribution files, and cross-repository skill name uniqueness.
 
 `oceans.ps1 status` and `./oceans status` show Git status, submodule status, known runtime skill roots, and managed oceans777 skill counts. Use `-Runtime` / `--runtime` to inspect one runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` to show only roots that already exist.
 
-`oceans.ps1 import` and `./oceans import` scan existing local skill roots for Codex, agents, Claude, OpenClaw, and Hermes, then print a review report for deciding what can be moved into oceans777 repositories. The import command is report-only: it does not copy files, delete files, commit, or push.
+`oceans.ps1 import` and `./oceans import` scan existing local skill roots for Codex, agents, Claude, OpenClaw, and Hermes, then print a review report for deciding what can be moved into oceans777 repositories. Runtime environment variables are honored first, and OpenClaw/Hermes also follow `XDG_CONFIG_HOME` when present. The import command is report-only: it does not copy files, delete files, commit, or push.
 
 ## Maintainer Skill Publishing
 
@@ -144,6 +144,7 @@ Publishing safety defaults:
 
 ```text
 stage requires an explicit single skill name
+stage validates SKILL.md name, description, and folder-name consistency
 stage does not overwrite an existing repository skill unless replace-existing is requested
 stage blocks risky content unless allow-risk is requested
 stage rejects symlinks and reparse points instead of dereferencing them
@@ -281,6 +282,7 @@ Windows:
 ```powershell
 .\oceans.ps1 import
 .\oceans.ps1 import -Runtime claude
+.\oceans.ps1 import -Format json
 ```
 
 Ubuntu and macOS:
@@ -288,6 +290,7 @@ Ubuntu and macOS:
 ```sh
 ./oceans import
 ./oceans import --runtime claude
+./oceans import --format json
 ```
 
 To scan a different skills directory:
@@ -309,6 +312,8 @@ The report classifies local skills as:
 ```text
 skip-system         -> do not publish Codex system skills
 missing-skill-md    -> repair before import
+invalid-skill-name  -> rename the local skill folder before import
+invalid-skill-metadata -> repair SKILL.md frontmatter before import
 already-managed     -> already has an oceans777 source marker
 duplicate-local-wins -> local skill matches a repository skill, but the local copy wins
 duplicate-local-runtime -> the same local skill name exists in more than one runtime root
@@ -331,7 +336,7 @@ Forked or adapted from other authors -> repos/community-skills/skills/<skill-nam
 Private or source unclear   -> do not publish yet
 ```
 
-The report also flags secret-like text and local absolute paths so you can review them before publishing.
+The report also flags missing metadata, missing referenced license files, secret-like text, local absolute paths, large files, and binary or unreadable files so you can review them before publishing. Use JSON output when another script or UI needs to consume the report programmatically.
 
 ## Add A First-Party Skill
 
@@ -347,7 +352,16 @@ Each skill must include:
 SKILL.md
 ```
 
-Skill names should use lowercase letters, digits, and hyphens.
+`SKILL.md` must start with frontmatter whose `name` equals the folder name and whose `description` is non-empty:
+
+```md
+---
+name: <skill-name>
+description: <what this skill is for>
+---
+```
+
+Skill names must use lowercase letters, digits, and hyphens.
 
 ## Add A Community Skill
 
@@ -365,6 +379,8 @@ UPSTREAM.md
 PATCHES.md
 LICENSE
 ```
+
+The same `SKILL.md` frontmatter rule applies to community skills.
 
 Use `UPSTREAM.md` to record the original repository, author, license, import date, and local changes.
 

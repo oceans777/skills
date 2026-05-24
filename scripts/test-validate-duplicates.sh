@@ -87,4 +87,25 @@ if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRS
 fi
 assert_contains "$OUTPUT" "Missing referenced license file in oceans-skills: missing-license-reference"
 
+mkdir -p "$FIRST_PARTY_ROOT/metadata-mismatch"
+cat > "$FIRST_PARTY_ROOT/metadata-mismatch/SKILL.md" <<'EOF'
+---
+name: different-name
+description: Name mismatch.
+---
+EOF
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected validate to fail for skill metadata mismatch." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "Invalid skill metadata in oceans-skills: metadata-mismatch: risk: skill name does not match folder name"
+
+mkdir -p "$FIRST_PARTY_ROOT/bad folder"
+printf '%s\n' "Missing SKILL.md." > "$FIRST_PARTY_ROOT/bad folder/README.md"
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected validate to fail for invalid folder name without SKILL.md." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "Invalid skill metadata in oceans-skills: bad folder: risk: invalid skill folder name"
+
 echo "Shell validate duplicate test passed."

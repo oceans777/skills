@@ -5,6 +5,7 @@ param(
 
   [string] $SourceRoot,
   [ValidateSet("codex", "agents", "claude", "openclaw", "hermes", "custom")] [string] $Runtime,
+  [ValidateSet("text", "json")] [string] $Format,
   [string] $Skill,
   [ValidateSet("oceans", "community")] [string] $Target,
   [switch] $AllowRisk,
@@ -47,6 +48,9 @@ switch ($Command) {
     }
     if ($Runtime) {
       $ImportArgs.Runtime = $Runtime
+    }
+    if ($Format) {
+      $ImportArgs.Format = $Format
     }
     & "$RepoRoot\scripts\import-skills.ps1" @ImportArgs
   }

@@ -28,6 +28,7 @@ function Join-OceansPath {
 
 function Get-OceansSkillRuntimeDefinitions {
   $UserHome = Get-OceansHome
+  $ConfigHome = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { (Join-OceansPath -Parts @($UserHome, ".config")) }
   @(
     [PSCustomObject]@{
       Runtime = "codex"
@@ -52,7 +53,7 @@ function Get-OceansSkillRuntimeDefinitions {
       } else {
         @(
           (Join-OceansPath -Parts @($UserHome, ".openclaw", "skills")),
-          (Join-OceansPath -Parts @($UserHome, ".config", "openclaw", "skills"))
+          (Join-OceansPath -Parts @($ConfigHome, "openclaw", "skills"))
         )
       }
     },
@@ -64,7 +65,7 @@ function Get-OceansSkillRuntimeDefinitions {
       } else {
         @(
           (Join-OceansPath -Parts @($UserHome, ".hermes", "skills")),
-          (Join-OceansPath -Parts @($UserHome, ".config", "hermes", "skills"))
+          (Join-OceansPath -Parts @($ConfigHome, "hermes", "skills"))
         )
       }
     }

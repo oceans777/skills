@@ -5,7 +5,7 @@ param(
   [string] $FirstPartySkillsRoot,
   [string] $CommunitySkillsRoot,
 
-  [ValidateSet("text")]
+  [ValidateSet("text", "json")]
   [string] $Format = "text"
 )
 
@@ -80,10 +80,23 @@ function Get-ManagedSource {
   return "unknown"
 }
 
-function Get-RiskNotes {
-  param([string] $SkillPath)
+function Get-ReportRiskNotes {
+  param(
+    [string] $SkillPath,
+    [string] $ExpectedName
+  )
 
-  $Risks = @(Get-OceansSkillRiskNotes -SkillPath $SkillPath)
+  $Risks = New-Object System.Collections.Generic.List[string]
+  foreach ($Issue in @(Get-OceansSkillMetadataIssues -SkillPath $SkillPath -ExpectedName $ExpectedName)) {
+    if (-not $Risks.Contains($Issue)) {
+      $Risks.Add($Issue)
+    }
+  }
+  foreach ($Risk in @(Get-OceansSkillRiskNotes -SkillPath $SkillPath)) {
+    if (-not $Risks.Contains($Risk)) {
+      $Risks.Add($Risk)
+    }
+  }
   if ($Risks.Count -eq 0) {
     return @("risk: none detected")
   }
@@ -121,6 +134,24 @@ function New-SkillReportItem {
     }
   }
 
+  $MetadataIssues = @(Get-OceansSkillMetadataIssues -SkillPath $SkillPath -ExpectedName $Name)
+  $InvalidFolder = $MetadataIssues -contains "risk: invalid skill folder name"
+  if ($InvalidFolder) {
+    return [ordered]@{
+      Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
+      Status = "invalid-skill-name"
+      Destination = "manual repair before import"
+      RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
+      Action = "repair folder name and SKILL.md frontmatter before deciding whether to publish"
+      Reason = "A publishable skill must have a valid folder name, SKILL.md name, and description."
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
+    }
+  }
+
   if (-not (Test-Path -LiteralPath $SkillFile -PathType Leaf)) {
     return [ordered]@{
       Name = $Name
@@ -133,7 +164,23 @@ function New-SkillReportItem {
       LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "repair SKILL.md before deciding whether to publish"
       Reason = "A publishable skill must include SKILL.md."
-      Risks = @(Get-RiskNotes -SkillPath $SkillPath)
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
+    }
+  }
+
+  if ($MetadataIssues.Count -gt 0) {
+    return [ordered]@{
+      Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
+      Status = "invalid-skill-metadata"
+      Destination = "manual repair before import"
+      RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
+      Action = "repair folder name and SKILL.md frontmatter before deciding whether to publish"
+      Reason = "A publishable skill must have a valid folder name, SKILL.md name, and description."
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
     }
   }
 
@@ -150,7 +197,7 @@ function New-SkillReportItem {
       LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "managed by oceans777; install may update it"
       Reason = "Local skill has an oceans777 first-party source marker."
-      Risks = @(Get-RiskNotes -SkillPath $SkillPath)
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
     }
   }
 
@@ -166,7 +213,7 @@ function New-SkillReportItem {
       LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "managed by oceans777; install may update it"
       Reason = "Local skill has an oceans777 community source marker."
-      Risks = @(Get-RiskNotes -SkillPath $SkillPath)
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
     }
   }
 
@@ -182,7 +229,7 @@ function New-SkillReportItem {
       LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "stage with an explicit runtime or source root after review"
       Reason = "The same local skill folder name exists in more than one runtime root."
-      Risks = @(Get-RiskNotes -SkillPath $SkillPath)
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
     }
   }
 
@@ -198,7 +245,7 @@ function New-SkillReportItem {
       LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "keep local skill; repository version will not overwrite it"
       Reason = "A repository skill has the same name, but this local skill has no oceans777 source marker."
-      Risks = @(Get-RiskNotes -SkillPath $SkillPath)
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
     }
   }
 
@@ -213,7 +260,7 @@ function New-SkillReportItem {
     LocalRuntimeMatch = $LocalRuntimeMatch
     Action = "review source before publishing"
     Reason = "No oceans777 source marker found."
-    Risks = @(Get-RiskNotes -SkillPath $SkillPath)
+    Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
   }
 }
 
@@ -245,6 +292,38 @@ $Items = $SkillRecords |
     $RuntimeMatch = (@($LocalRuntimeMatches[$_.Name]) | Sort-Object) -join ", "
     New-SkillReportItem -Directory $_.Directory -Runtime $_.Runtime -SourceRoot $_.SourceRoot -LocalRuntimeMatch $RuntimeMatch
   }
+
+if ($Format -eq "json") {
+  $Json = [ordered]@{
+    source_roots = @($SourceRoots | ForEach-Object {
+      [ordered]@{
+        runtime = $_.Runtime
+        path = $_.Path
+      }
+    })
+    first_party_target = $FirstPartyRoot
+    community_target = $CommunityRoot
+    mode = "report only"
+    copied_files = 0
+    items = @($Items | ForEach-Object {
+      [ordered]@{
+        name = $_.Name
+        runtime = $_.Runtime
+        source_root = $_.SourceRoot
+        source_path = $_.SourcePath
+        status = $_.Status
+        destination = $_.Destination
+        repository_match = $_.RepositoryMatch
+        local_runtime_match = $_.LocalRuntimeMatch
+        action = $_.Action
+        reason = $_.Reason
+        risks = @($_.Risks)
+      }
+    })
+  }
+  $Json | ConvertTo-Json -Depth 8 -Compress
+  exit 0
+}
 
 Write-Host "oceans777 local skill import report"
 Write-Host "Source roots:"

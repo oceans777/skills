@@ -253,6 +253,29 @@ try {
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "missing-skill-md: missing-skill"
 
+  $Fixture = New-Fixture -Name "metadata-mismatch"
+  New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "folder-name") | Out-Null
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "folder-name\SKILL.md") -Value "---`nname: different-name`ndescription: Name mismatch.`n---`n" -Encoding UTF8
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "folder-name" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
+  Assert-Contains -Text $Output -Expected "invalid-skill-metadata: folder-name"
+  Assert-Contains -Text $Output -Expected "risk: skill name does not match folder name"
+
+  $Fixture = New-Fixture -Name "metadata-missing-description"
+  New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "missing-description") | Out-Null
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "missing-description\SKILL.md") -Value "---`nname: missing-description`n---`n" -Encoding UTF8
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "missing-description" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
+  Assert-Contains -Text $Output -Expected "invalid-skill-metadata: missing-description"
+  Assert-Contains -Text $Output -Expected "risk: missing skill description"
+
+  $Fixture = New-Fixture -Name "crlf-uppercase-frontmatter"
+  New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "crlf-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "crlf-skill\SKILL.md") -Value "---`r`nName: crlf-skill`r`nDescription: CRLF metadata.`r`n---`r`n" -NoNewline -Encoding UTF8
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "crlf-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args
+  Assert-Contains -Text $Output -Expected "staged-skill: crlf-skill"
+
   $Fixture = New-Fixture -Name "secret-risk"
   $Args = Get-BaseArgs -Fixture $Fixture -Skill "risky-skill" -Target "oceans"
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure

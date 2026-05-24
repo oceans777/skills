@@ -128,12 +128,10 @@ if [ "$SKILL" = ".system" ]; then
   exit 1
 fi
 
-case "$SKILL" in
-  *[!abcdefghijklmnopqrstuvwxyz0123456789-]*|""|-*|*-|*--*)
-    echo "invalid-skill-name: $SKILL"
-    exit 1
-    ;;
-esac
+if ! oceans_valid_skill_name "$SKILL"; then
+  echo "invalid-skill-name: $SKILL"
+  exit 1
+fi
 
 case "$TARGET" in
   oceans)
@@ -236,6 +234,14 @@ fi
 SOURCE_SKILL=$(CDPATH= cd "$SOURCE_SKILL" && pwd -P)
 if [ ! -f "$SOURCE_SKILL/SKILL.md" ]; then
   echo "missing-skill-md: $SKILL"
+  exit 1
+fi
+
+METADATA_ISSUES=$(oceans_skill_metadata_issues "$SOURCE_SKILL" "$SKILL")
+if [ -n "$METADATA_ISSUES" ]; then
+  echo "invalid-skill-metadata: $SKILL"
+  printf '%s\n' "$METADATA_ISSUES"
+  echo "risk_status: blocked"
   exit 1
 fi
 

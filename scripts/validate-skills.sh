@@ -52,11 +52,16 @@ test_skill_directory() {
     [ -d "$skill_path" ] || continue
     skill_name=${skill_path##*/}
 
-    case "$skill_name" in
-      ''|*[!a-z0-9-]*)
-        add_failure "Invalid skill folder name in $repository_name: $skill_name"
-        ;;
-    esac
+    metadata_issues=$(oceans_skill_metadata_issues "$skill_path" "$skill_name")
+    if [ -n "$metadata_issues" ]; then
+      old_ifs=$IFS
+      IFS='
+'
+      for issue in $metadata_issues; do
+        add_failure "Invalid skill metadata in $repository_name: $skill_name: $issue"
+      done
+      IFS=$old_ifs
+    fi
 
     if [ ! -f "$skill_path/SKILL.md" ]; then
       add_failure "Missing SKILL.md in $repository_name: $skill_name"

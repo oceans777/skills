@@ -106,6 +106,24 @@ try {
   }
   Assert-Contains -Text $Result.Output -Expected "Missing referenced license file in oceans-skills: missing-license-reference"
 
+  $InvalidMetadata = Join-Path $FirstPartyRoot "metadata-mismatch"
+  New-Item -ItemType Directory -Force -Path $InvalidMetadata | Out-Null
+  Set-Content -LiteralPath (Join-Path $InvalidMetadata "SKILL.md") -Value "---`nname: different-name`ndescription: Name mismatch.`n---`n" -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  if ($Result.ExitCode -eq 0) {
+    throw "Expected validate to fail for skill metadata mismatch."
+  }
+  Assert-Contains -Text $Result.Output -Expected "Invalid skill metadata in oceans-skills: metadata-mismatch: risk: skill name does not match folder name"
+
+  $InvalidFolderMissingSkill = Join-Path $FirstPartyRoot "bad folder"
+  New-Item -ItemType Directory -Force -Path $InvalidFolderMissingSkill | Out-Null
+  Set-Content -LiteralPath (Join-Path $InvalidFolderMissingSkill "README.md") -Value "Missing SKILL.md." -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  if ($Result.ExitCode -eq 0) {
+    throw "Expected validate to fail for invalid folder name without SKILL.md."
+  }
+  Assert-Contains -Text $Result.Output -Expected "Invalid skill metadata in oceans-skills: bad folder: risk: invalid skill folder name"
+
   Write-Host "PowerShell validate duplicate test passed."
 } finally {
   Remove-TestRoot

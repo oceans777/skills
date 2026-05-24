@@ -57,6 +57,7 @@ $OldAgentsHome = $env:AGENTS_HOME
 $OldClaudeHome = $env:CLAUDE_HOME
 $OldOpenClawHome = $env:OPENCLAW_HOME
 $OldHermesHome = $env:HERMES_HOME
+$OldXdgConfigHome = $env:XDG_CONFIG_HOME
 
 try {
   $CodexHome = Join-Path $SandboxRoot "codex-home"
@@ -96,6 +97,18 @@ try {
   Assert-Contains -Text $Output -Expected "runtime: openclaw"
   Assert-Contains -Text $Output -Expected "runtime: hermes"
 
+  $XdgConfigHome = Join-Path $SandboxRoot "xdg-config"
+  New-Item -ItemType Directory -Force -Path (Join-Path $XdgConfigHome "openclaw\skills") | Out-Null
+  New-Item -ItemType Directory -Force -Path (Join-Path $XdgConfigHome "hermes\skills") | Out-Null
+  Remove-Item Env:\OPENCLAW_HOME -ErrorAction SilentlyContinue
+  Remove-Item Env:\HERMES_HOME -ErrorAction SilentlyContinue
+  $env:XDG_CONFIG_HOME = $XdgConfigHome
+  $Output = Invoke-SkillRoots -Arguments @("-Mode", "install-all-existing")
+  Assert-Contains -Text $Output -Expected "path: $(Join-Path $XdgConfigHome "openclaw\skills")"
+  Assert-Contains -Text $Output -Expected "path: $(Join-Path $XdgConfigHome "hermes\skills")"
+  $env:OPENCLAW_HOME = $OpenClawHome
+  $env:HERMES_HOME = $HermesHome
+
   $Output = Invoke-SkillRoots -Arguments @("-Mode", "stage", "-Runtime", "agents")
   Assert-Contains -Text $Output -Expected "runtime: agents"
   Assert-Contains -Text $Output -Expected "path: $(Join-Path $AgentsHome "skills")"
@@ -116,6 +129,7 @@ try {
   if ($null -eq $OldClaudeHome) { Remove-Item Env:\CLAUDE_HOME -ErrorAction SilentlyContinue } else { $env:CLAUDE_HOME = $OldClaudeHome }
   if ($null -eq $OldOpenClawHome) { Remove-Item Env:\OPENCLAW_HOME -ErrorAction SilentlyContinue } else { $env:OPENCLAW_HOME = $OldOpenClawHome }
   if ($null -eq $OldHermesHome) { Remove-Item Env:\HERMES_HOME -ErrorAction SilentlyContinue } else { $env:HERMES_HOME = $OldHermesHome }
+  if ($null -eq $OldXdgConfigHome) { Remove-Item Env:\XDG_CONFIG_HOME -ErrorAction SilentlyContinue } else { $env:XDG_CONFIG_HOME = $OldXdgConfigHome }
 
   if (Test-Path -LiteralPath $SandboxRoot) {
     Remove-Item -LiteralPath $SandboxRoot -Recurse -Force

@@ -103,6 +103,13 @@ assert_contains "$OUTPUT" "path: $HOME/.config/openclaw/skills"
 assert_contains "$OUTPUT" "path: $HOME/.hermes/skills"
 assert_contains "$OUTPUT" "path: $HOME/.config/hermes/skills"
 
+XDG_CONFIG_HOME=$SANDBOX_ROOT/xdg-config
+export XDG_CONFIG_HOME
+mkdir -p "$XDG_CONFIG_HOME/openclaw/skills" "$XDG_CONFIG_HOME/hermes/skills"
+OUTPUT=$(run_roots_success --mode install-all-existing)
+assert_contains "$OUTPUT" "path: $XDG_CONFIG_HOME/openclaw/skills"
+assert_contains "$OUTPUT" "path: $XDG_CONFIG_HOME/hermes/skills"
+
 OUTPUT=$(run_roots_success --mode stage --runtime agents)
 assert_contains "$OUTPUT" "runtime: agents"
 assert_contains "$OUTPUT" "path: $AGENTS_HOME/skills"

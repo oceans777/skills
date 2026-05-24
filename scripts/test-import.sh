@@ -97,6 +97,41 @@ assert_contains "$OUTPUT" "missing-skill-md"
 assert_contains "$OUTPUT" ".system"
 assert_contains "$OUTPUT" "skip-system"
 
+INVALID_ROOT=$SANDBOX_ROOT/invalid-local-skills
+mkdir -p "$INVALID_ROOT/bad skill" "$INVALID_ROOT/folder-name" "$INVALID_ROOT/missing-description" "$INVALID_ROOT/bad missing"
+cat > "$INVALID_ROOT/bad skill/SKILL.md" <<'EOF'
+---
+name: bad skill
+description: Invalid directory name.
+---
+EOF
+cat > "$INVALID_ROOT/folder-name/SKILL.md" <<'EOF'
+---
+name: different-name
+description: Name mismatch.
+---
+EOF
+cat > "$INVALID_ROOT/missing-description/SKILL.md" <<'EOF'
+---
+name: missing-description
+---
+EOF
+printf '%s\n' "Missing SKILL.md and invalid folder name." > "$INVALID_ROOT/bad missing/README.md"
+OUTPUT=$(sh "$REPO_ROOT/scripts/import-skills.sh" \
+  --source-root "$INVALID_ROOT" \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT")
+assert_contains "$OUTPUT" "bad skill"
+assert_contains "$OUTPUT" "status: invalid-skill-name"
+assert_contains "$OUTPUT" "folder-name"
+assert_contains "$OUTPUT" "status: invalid-skill-metadata"
+assert_contains "$OUTPUT" "risk: skill name does not match folder name"
+assert_contains "$OUTPUT" "missing-description"
+assert_contains "$OUTPUT" "risk: missing skill description"
+assert_contains "$OUTPUT" "bad missing"
+assert_contains "$OUTPUT" "risk: invalid skill folder name"
+assert_not_contains "$OUTPUT" "risk: none detected"
+
 LICENSE_ROOT=$SANDBOX_ROOT/license-local-skills
 mkdir -p "$LICENSE_ROOT/missing-license-skill"
 cat > "$LICENSE_ROOT/missing-license-skill/SKILL.md" <<'EOF'
@@ -175,6 +210,16 @@ assert_contains "$OUTPUT" "source_path: $AGENTS_HOME/skills/shared-runtime-skill
 assert_contains "$OUTPUT" "shared-runtime-skill"
 assert_contains "$OUTPUT" "status: duplicate-local-runtime"
 assert_contains "$OUTPUT" "local_runtime_match: agents, claude"
+
+OUTPUT=$(sh "$REPO_ROOT/scripts/import-skills.sh" \
+  --source-root "$LOCAL_SKILLS_ROOT" \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT" \
+  --format json)
+assert_contains "$OUTPUT" '"mode":"report only"'
+assert_contains "$OUTPUT" '"name":"my-skill"'
+assert_contains "$OUTPUT" '"status":"duplicate-local-wins"'
+assert_contains "$OUTPUT" '"risks":["risk: secret-like text","risk: local absolute path"]'
 
 HOME=$SANDBOX_ROOT/fallback-home
 export HOME

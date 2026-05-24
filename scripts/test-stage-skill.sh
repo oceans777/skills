@@ -234,6 +234,35 @@ printf '%s\n' "Missing SKILL.md" > "$SOURCE_ROOT/missing-skill/README.md"
 OUTPUT=$(run_stage_failure_common missing-skill oceans)
 assert_contains "$OUTPUT" "missing-skill-md: missing-skill"
 
+new_fixture metadata-mismatch
+mkdir -p "$SOURCE_ROOT/folder-name"
+cat > "$SOURCE_ROOT/folder-name/SKILL.md" <<'EOF'
+---
+name: different-name
+description: Name mismatch.
+---
+EOF
+OUTPUT=$(run_stage_failure_common folder-name oceans)
+assert_contains "$OUTPUT" "invalid-skill-metadata: folder-name"
+assert_contains "$OUTPUT" "risk: skill name does not match folder name"
+
+new_fixture metadata-missing-description
+mkdir -p "$SOURCE_ROOT/missing-description"
+cat > "$SOURCE_ROOT/missing-description/SKILL.md" <<'EOF'
+---
+name: missing-description
+---
+EOF
+OUTPUT=$(run_stage_failure_common missing-description oceans)
+assert_contains "$OUTPUT" "invalid-skill-metadata: missing-description"
+assert_contains "$OUTPUT" "risk: missing skill description"
+
+new_fixture crlf-uppercase-frontmatter
+mkdir -p "$SOURCE_ROOT/crlf-skill"
+printf '%s\r\n' "---" "Name: crlf-skill" "Description: CRLF metadata." "---" > "$SOURCE_ROOT/crlf-skill/SKILL.md"
+OUTPUT=$(run_stage_success_common crlf-skill oceans)
+assert_contains "$OUTPUT" "staged-skill: crlf-skill"
+
 new_fixture secret-risk
 OUTPUT=$(run_stage_failure_common risky-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: risky-skill"

@@ -13,6 +13,7 @@ oceans_home() {
 runtime_candidates() {
   runtime=$1
   home=$(oceans_home)
+  config_home=${XDG_CONFIG_HOME:-$home/.config}
 
   case "$runtime" in
     codex)
@@ -29,7 +30,7 @@ runtime_candidates() {
         printf '%s\n' "$OPENCLAW_HOME/skills"
       else
         printf '%s\n' "$home/.openclaw/skills"
-        printf '%s\n' "$home/.config/openclaw/skills"
+        printf '%s\n' "$config_home/openclaw/skills"
       fi
       ;;
     hermes)
@@ -37,7 +38,7 @@ runtime_candidates() {
         printf '%s\n' "$HERMES_HOME/skills"
       else
         printf '%s\n' "$home/.hermes/skills"
-        printf '%s\n' "$home/.config/hermes/skills"
+        printf '%s\n' "$config_home/hermes/skills"
       fi
       ;;
     *)

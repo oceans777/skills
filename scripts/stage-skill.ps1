@@ -35,11 +35,6 @@ function Resolve-DefaultSourceRoot {
   return (Get-OceansRuntimeRoot -Runtime $Runtime -Operation "stage").Path
 }
 
-function Test-SkillName {
-  param([string] $Name)
-  return ($Name -match '^[a-z0-9]+(-[a-z0-9]+)*$')
-}
-
 function Resolve-AbsolutePath {
   param([Parameter(Mandatory = $true)][string] $Path)
 
@@ -263,7 +258,7 @@ if ($Skill -eq ".system") {
   exit 1
 }
 
-if (-not (Test-SkillName -Name $Skill)) {
+if (-not (Test-OceansSkillName -Name $Skill)) {
   Write-Host "invalid-skill-name: $Skill"
   exit 1
 }
@@ -285,6 +280,16 @@ if (-not (Test-Path -LiteralPath $SourceSkillPath -PathType Container)) {
 $SourceSkillPath = Resolve-AbsolutePath -Path $SourceSkillPath
 if (-not (Test-Path -LiteralPath (Join-Path $SourceSkillPath "SKILL.md") -PathType Leaf)) {
   Write-Host "missing-skill-md: $Skill"
+  exit 1
+}
+
+$MetadataIssues = @(Get-OceansSkillMetadataIssues -SkillPath $SourceSkillPath -ExpectedName $Skill)
+if ($MetadataIssues.Count -gt 0) {
+  Write-Host "invalid-skill-metadata: $Skill"
+  foreach ($Issue in $MetadataIssues) {
+    Write-Host $Issue
+  }
+  Write-Host "risk_status: blocked"
   exit 1
 }
 

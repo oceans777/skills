@@ -31,8 +31,8 @@ function Test-SkillDirectory {
   }
 
   Get-ChildItem -LiteralPath $SkillsPath -Directory | ForEach-Object {
-    if ($_.Name -notmatch '^[a-z0-9-]+$') {
-      $Failures.Add("Invalid skill folder name in ${RepositoryName}: $($_.Name)")
+    foreach ($Issue in @(Get-OceansSkillMetadataIssues -SkillPath $_.FullName -ExpectedName $_.Name)) {
+      $Failures.Add("Invalid skill metadata in ${RepositoryName}: $($_.Name): $Issue")
     }
 
     $IsSkillReparsePoint = (($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)

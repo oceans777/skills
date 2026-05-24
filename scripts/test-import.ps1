@@ -94,6 +94,30 @@ try {
   Assert-Contains -Text $Output -Expected ".system"
   Assert-Contains -Text $Output -Expected "skip-system"
 
+  $InvalidRoot = Join-Path $SandboxRoot "invalid-local-skills"
+  New-Item -ItemType Directory -Force -Path (Join-Path $InvalidRoot "bad skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $InvalidRoot "bad skill\SKILL.md") -Value "---`nname: bad skill`ndescription: Invalid directory name.`n---`n" -Encoding UTF8
+  New-Item -ItemType Directory -Force -Path (Join-Path $InvalidRoot "folder-name") | Out-Null
+  Set-Content -LiteralPath (Join-Path $InvalidRoot "folder-name\SKILL.md") -Value "---`nname: different-name`ndescription: Name mismatch.`n---`n" -Encoding UTF8
+  New-Item -ItemType Directory -Force -Path (Join-Path $InvalidRoot "missing-description") | Out-Null
+  Set-Content -LiteralPath (Join-Path $InvalidRoot "missing-description\SKILL.md") -Value "---`nname: missing-description`n---`n" -Encoding UTF8
+  New-Item -ItemType Directory -Force -Path (Join-Path $InvalidRoot "bad missing") | Out-Null
+  Set-Content -LiteralPath (Join-Path $InvalidRoot "bad missing\README.md") -Value "Missing SKILL.md and invalid folder name." -Encoding UTF8
+  $InvalidOutput = & "$RepoRoot\scripts\import-skills.ps1" `
+    -SourceRoot $InvalidRoot `
+    -FirstPartySkillsRoot $FirstPartyRoot `
+    -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
+  Assert-Contains -Text $InvalidOutput -Expected "bad skill"
+  Assert-Contains -Text $InvalidOutput -Expected "status: invalid-skill-name"
+  Assert-Contains -Text $InvalidOutput -Expected "folder-name"
+  Assert-Contains -Text $InvalidOutput -Expected "status: invalid-skill-metadata"
+  Assert-Contains -Text $InvalidOutput -Expected "risk: skill name does not match folder name"
+  Assert-Contains -Text $InvalidOutput -Expected "missing-description"
+  Assert-Contains -Text $InvalidOutput -Expected "risk: missing skill description"
+  Assert-Contains -Text $InvalidOutput -Expected "bad missing"
+  Assert-Contains -Text $InvalidOutput -Expected "risk: invalid skill folder name"
+  Assert-NotContains -Text $InvalidOutput -Unexpected "risk: none detected"
+
   $LicenseRoot = Join-Path $SandboxRoot "license-local-skills"
   $LicenseSkill = Join-Path $LicenseRoot "missing-license-skill"
   New-Item -ItemType Directory -Force -Path $LicenseSkill | Out-Null
@@ -159,6 +183,30 @@ try {
   Assert-Contains -Text $Output -Expected "shared-runtime-skill"
   Assert-Contains -Text $Output -Expected "status: duplicate-local-runtime"
   Assert-Contains -Text $Output -Expected "local_runtime_match: agents, claude"
+
+  $JsonOutput = & "$RepoRoot\scripts\import-skills.ps1" `
+    -SourceRoot $LocalSkillsRoot `
+    -FirstPartySkillsRoot $FirstPartyRoot `
+    -CommunitySkillsRoot $CommunityRoot `
+    -Format json *>&1 | Out-String
+  $Json = $JsonOutput | ConvertFrom-Json
+  if ($Json.mode -ne "report only") {
+    throw "Expected JSON mode to be report only."
+  }
+  if (-not (@($Json.items | Where-Object { $_.name -eq "my-skill" -and $_.status -eq "duplicate-local-wins" }).Count -eq 1)) {
+    throw "Expected JSON output to include my-skill duplicate-local-wins."
+  }
+  $RiskyJsonItem = @($Json.items | Where-Object { $_.name -eq "risky-skill" })[0]
+  if (-not (@($RiskyJsonItem.risks) -contains "risk: secret-like text")) {
+    throw "Expected JSON output to include risky-skill risk notes."
+  }
+  $WrapperJsonOutput = & "$RepoRoot\oceans.ps1" import `
+    -SourceRoot $LocalSkillsRoot `
+    -Format json *>&1 | Out-String
+  $WrapperJson = $WrapperJsonOutput | ConvertFrom-Json
+  if ($WrapperJson.mode -ne "report only") {
+    throw "Expected oceans.ps1 wrapper to pass import -Format json through."
+  }
 
   Write-Host "PowerShell import test passed."
 } finally {
