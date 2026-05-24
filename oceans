@@ -23,6 +23,12 @@ case "$COMMAND" in
   import)
     sh "$REPO_ROOT/scripts/import-skills.sh" "$@"
     ;;
+  stage)
+    sh "$REPO_ROOT/scripts/stage-skill.sh" "$@"
+    ;;
+  publish)
+    sh "$REPO_ROOT/scripts/publish-skills.sh" "$@"
+    ;;
   help)
     echo "oceans777 skills commands:"
     echo "  ./oceans sync      Pull updates and check out pinned child repositories"
@@ -30,6 +36,8 @@ case "$COMMAND" in
     echo "  ./oceans validate  Validate repository and skill structure"
     echo "  ./oceans status    Show repository and install status"
     echo "  ./oceans import    Scan local skills and print an import review report"
+    echo "  ./oceans stage     Stage one local skill into an oceans777 repository"
+    echo "  ./oceans publish   Validate, commit, and push staged skill repository changes"
     ;;
   *)
     echo "Unknown command: $COMMAND" >&2

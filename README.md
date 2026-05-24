@@ -62,6 +62,8 @@ skills/
 .\oceans.ps1 validate
 .\oceans.ps1 status
 .\oceans.ps1 import
+.\oceans.ps1 stage
+.\oceans.ps1 publish
 ```
 
 ### Ubuntu and macOS
@@ -72,6 +74,8 @@ skills/
 ./oceans validate
 ./oceans status
 ./oceans import
+./oceans stage
+./oceans publish
 ```
 
 ## What The Commands Do
@@ -87,6 +91,64 @@ skills/
 `oceans.ps1 status` and `./oceans status` show Git status, submodule status, and local install target information.
 
 `oceans.ps1 import` and `./oceans import` scan your local Codex skills and print a review report for deciding what can be moved into oceans777 repositories. The import command is report-only: it does not copy files, delete files, commit, or push.
+
+`oceans.ps1 stage` and `./oceans stage` copy one explicitly named local skill into either the first-party or community repository after safety checks.
+
+`oceans.ps1 publish` and `./oceans publish` validate staged skill changes, commit child repository updates when needed, update submodule pins, and push normal `main` branches. It never force-pushes.
+
+## Maintainer Skill Publishing
+
+Review local skills first:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import
+```
+
+Stage exactly one reviewed skill into a target repository:
+
+Windows:
+
+```powershell
+.\oceans.ps1 stage -SourceRoot "$HOME/.codex/skills" -Skill frontend-design -Target oceans
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans stage --source-root "$HOME/.codex/skills" --skill frontend-design --target oceans
+```
+
+Publish after validation and review:
+
+Windows:
+
+```powershell
+.\oceans.ps1 publish
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans publish
+```
+
+Publishing safety defaults:
+
+```text
+stage requires an explicit single skill name
+stage does not overwrite an existing repository skill unless replace-existing is requested
+stage blocks risky content unless allow-risk is requested
+community skills require real upstream and license records before staging
+publish never force-pushes
+```
 
 ## Repository Layout
 
@@ -111,6 +173,10 @@ skills/
     status.sh
     import-skills.ps1
     import-skills.sh
+    stage-skill.ps1
+    stage-skill.sh
+    publish-skills.ps1
+    publish-skills.sh
   docs/
 ```
 

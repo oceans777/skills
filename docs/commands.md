@@ -70,6 +70,8 @@ Both approaches can result in all repositories being present locally. The setup 
 .\oceans.ps1 validate
 .\oceans.ps1 status
 .\oceans.ps1 import
+.\oceans.ps1 stage
+.\oceans.ps1 publish
 ```
 
 ### Ubuntu and macOS
@@ -80,6 +82,8 @@ Both approaches can result in all repositories being present locally. The setup 
 ./oceans validate
 ./oceans status
 ./oceans import
+./oceans stage
+./oceans publish
 ```
 
 ## Command Reference
@@ -93,6 +97,64 @@ Both approaches can result in all repositories being present locally. The setup 
 `status` prints repository state, submodule state, and install target state.
 
 `import` scans local Codex skills and prints a review-only classification report. It never copies, deletes, commits, or pushes files.
+
+`stage` copies one explicitly named local skill into either `repos/oceans-skills` or `repos/community-skills` after validation and safety checks.
+
+`publish` validates staged skill changes, commits child repository skill updates when needed, updates submodule pins in the entry repository, and pushes normal `main` branches. It never force-pushes.
+
+## Maintainer Publishing Flow
+
+Review local skills:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import
+```
+
+Stage one reviewed skill:
+
+Windows:
+
+```powershell
+.\oceans.ps1 stage -SourceRoot "$HOME/.codex/skills" -Skill frontend-design -Target oceans
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans stage --source-root "$HOME/.codex/skills" --skill frontend-design --target oceans
+```
+
+Publish staged changes:
+
+Windows:
+
+```powershell
+.\oceans.ps1 publish
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans publish
+```
+
+Safety defaults:
+
+```text
+explicit single skill only
+no default overwrite
+no default risky content
+community requires real upstream/license records
+publish never force-pushes
+```
 
 ## Local-First Duplicate Policy
 
