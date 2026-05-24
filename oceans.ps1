@@ -35,7 +35,10 @@ switch ($Command) {
     & "$RepoRoot\scripts\validate-skills.ps1"
   }
   "status" {
-    & "$RepoRoot\scripts\status.ps1"
+    $StatusArgs = @{}
+    if ($Runtime) { $StatusArgs.Runtime = $Runtime }
+    if ($AllExistingRuntimes) { $StatusArgs.AllExistingRuntimes = $true }
+    & "$RepoRoot\scripts\status.ps1" @StatusArgs
   }
   "import" {
     $ImportArgs = @{}
@@ -75,7 +78,7 @@ switch ($Command) {
     Write-Host "  .\oceans.ps1 sync      Pull updates and check out pinned child repositories"
     Write-Host "  .\oceans.ps1 install   Install skills locally (default: codex)"
     Write-Host "  .\oceans.ps1 validate  Validate repository and skill structure"
-    Write-Host "  .\oceans.ps1 status    Show repository and install status"
+    Write-Host "  .\oceans.ps1 status    Show repository and runtime skill root status"
     Write-Host "  .\oceans.ps1 import    Scan local runtime skills and print an import review report"
     Write-Host ""
     Write-Host "Maintainer publishing commands:"

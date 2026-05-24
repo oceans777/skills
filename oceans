@@ -18,7 +18,7 @@ case "$COMMAND" in
     sh "$REPO_ROOT/scripts/validate-skills.sh"
     ;;
   status)
-    sh "$REPO_ROOT/scripts/status.sh"
+    sh "$REPO_ROOT/scripts/status.sh" "$@"
     ;;
   import)
     sh "$REPO_ROOT/scripts/import-skills.sh" "$@"
@@ -36,7 +36,7 @@ case "$COMMAND" in
     echo "  ./oceans sync      Pull updates and check out pinned child repositories"
     echo "  ./oceans install   Install skills locally (default: codex)"
     echo "  ./oceans validate  Validate repository and skill structure"
-    echo "  ./oceans status    Show repository and install status"
+    echo "  ./oceans status    Show repository and runtime skill root status"
     echo "  ./oceans import    Scan local runtime skills and print an import review report"
     echo ""
     echo "Maintainer publishing commands:"

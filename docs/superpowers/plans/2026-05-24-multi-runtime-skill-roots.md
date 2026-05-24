@@ -16,11 +16,11 @@
 - Create: `scripts/test-skill-roots.ps1`
 - Create: `scripts/test-skill-roots.sh`
 
-- [ ] Write tests that set temporary runtime home env vars and assert root listing includes `codex`, `agents`, `claude`, `openclaw`, and `hermes`.
-- [ ] Assert default install target is Codex only.
-- [ ] Assert all-existing mode returns only existing runtime roots.
-- [ ] Assert explicit `custom` requires a path.
-- [ ] Run both tests and verify they fail because `skill-roots` scripts do not exist.
+- [x] Write tests that set temporary runtime home env vars and assert root listing includes `codex`, `agents`, `claude`, `openclaw`, and `hermes`.
+- [x] Assert default install target is Codex only.
+- [x] Assert all-existing mode returns only existing runtime roots.
+- [x] Assert explicit `custom` requires a path.
+- [x] Run both tests and verify they fail because `skill-roots` scripts do not exist.
 
 ### Task 2: Root Registry Implementation
 
@@ -28,11 +28,11 @@
 - Create: `scripts/skill-roots.ps1`
 - Create: `scripts/skill-roots.sh`
 
-- [ ] Implement runtime definitions for Codex, agents, Claude, OpenClaw, Hermes, and custom.
-- [ ] Implement list mode with `runtime`, `status`, `path`, and `reason` fields.
-- [ ] Implement resolve mode for `scan`, `stage`, and `install`.
-- [ ] Run root tests and verify they pass.
-- [ ] Commit root registry and tests.
+- [x] Implement runtime definitions for Codex, agents, Claude, OpenClaw, Hermes, and custom.
+- [x] Implement list mode with `runtime`, `status`, `path`, and `reason` fields.
+- [x] Implement resolve mode for `scan`, `stage`, and `install`.
+- [x] Run root tests and verify they pass.
+- [x] Commit root registry and tests.
 
 ### Task 3: Import Multi-Root Scan
 
@@ -42,12 +42,12 @@
 - Modify: `scripts/test-import.ps1`
 - Modify: `scripts/test-import.sh`
 
-- [ ] Add failing tests for multiple existing roots and duplicate local runtime skill names.
-- [ ] Update import scripts to source root registry and scan all existing roots by default.
-- [ ] Preserve `SourceRoot` / `--source-root` as custom single-root scan.
-- [ ] Print `runtime`, `source_root`, and `source_path` for every skill item.
-- [ ] Run import tests and verify they pass.
-- [ ] Commit import changes.
+- [x] Add failing tests for multiple existing roots and duplicate local runtime skill names.
+- [x] Update import scripts to source root registry and scan all existing roots by default.
+- [x] Preserve `SourceRoot` / `--source-root` as custom single-root scan.
+- [x] Print `runtime`, `source_root`, and `source_path` for every skill item.
+- [x] Run import tests and verify they pass.
+- [x] Commit import changes.
 
 ### Task 4: Stage Runtime Selection
 
@@ -59,12 +59,12 @@
 - Modify: `scripts/test-stage-skill.ps1`
 - Modify: `scripts/test-stage-skill.sh`
 
-- [ ] Add failing tests for `Runtime agents` / `--runtime agents`.
-- [ ] Add failing tests that explicit source root wins over runtime.
-- [ ] Wire wrapper runtime arguments to stage scripts.
-- [ ] Resolve source root through root registry when runtime is supplied.
-- [ ] Run stage tests and verify they pass.
-- [ ] Commit stage changes.
+- [x] Add failing tests for `Runtime agents` / `--runtime agents`.
+- [x] Add failing tests that explicit source root wins over runtime.
+- [x] Wire wrapper runtime arguments to stage scripts.
+- [x] Resolve source root through root registry when runtime is supplied.
+- [x] Run stage tests and verify they pass.
+- [x] Commit stage changes.
 
 ### Task 5: Install Runtime Selection
 
@@ -76,24 +76,26 @@
 - Modify: `scripts/test-install-local-first.ps1`
 - Modify: `scripts/test-install-local-first.sh`
 
-- [ ] Add failing tests for `Runtime claude` / `--runtime claude`.
-- [ ] Add failing tests for all-existing runtime install.
-- [ ] Keep default install as Codex only.
-- [ ] Write `runtime=` and `install_root=` into `.oceans-skill-source`.
-- [ ] Preserve local-first duplicate behavior.
-- [ ] Run install tests and verify they pass.
-- [ ] Commit install changes.
+- [x] Add failing tests for `Runtime claude` / `--runtime claude`.
+- [x] Add failing tests for all-existing runtime install.
+- [x] Keep default install as Codex only.
+- [x] Write `runtime=` and `install_root=` into `.oceans-skill-source`.
+- [x] Preserve local-first duplicate behavior.
+- [x] Run install tests and verify they pass.
+- [x] Commit install changes.
 
-### Task 6: Documentation and Full Verification
+### Task 6: Status, Documentation, and Full Verification
 
 **Files:**
 - Modify: `README.md`
 - Modify: `docs/commands.md`
 - Modify: `docs/skill-sync-policy.md`
 
-- [ ] Update docs with runtime root table and command examples.
-- [ ] Run PowerShell syntax, shell syntax, `git diff --check`.
-- [ ] Run all PowerShell and shell tests.
-- [ ] Run setup and wrapper smoke tests with temporary homes.
-- [ ] Review final diff for path safety and docs consistency.
-- [ ] Merge to main and push.
+- [x] Add status tests for default, one-runtime, and all-existing runtime reports.
+- [x] Wire status through the shared root registry.
+- [x] Update docs with runtime root table and command examples.
+- [x] Run PowerShell syntax, shell syntax, `git diff --check`.
+- [x] Run all PowerShell and shell tests.
+- [x] Run setup and wrapper smoke tests with temporary homes.
+- [x] Review final diff for path safety and docs consistency.
+- [x] Merge to main and push.

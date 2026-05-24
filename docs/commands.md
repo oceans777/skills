@@ -92,7 +92,7 @@ Normal users only need setup plus these commands. `import` is a report-only revi
 
 `validate` checks skill structure, required files, and third-party attribution.
 
-`status` prints repository state, submodule state, and install target state.
+`status` prints repository state, submodule state, known runtime skill roots, and managed oceans777 skill counts. Use `-Runtime` / `--runtime` to inspect one runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` to show only roots that already exist.
 
 `import` scans existing Codex, agents, Claude, OpenClaw, and Hermes skill roots and prints a review-only classification report. It never copies, deletes, commits, or pushes files.
 
@@ -253,3 +253,21 @@ Ubuntu and macOS:
 ```
 
 `help` prints available commands.
+
+## Runtime Status Examples
+
+Windows:
+
+```powershell
+.\oceans.ps1 status
+.\oceans.ps1 status -Runtime claude
+.\oceans.ps1 status -AllExistingRuntimes
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans status
+./oceans status --runtime claude
+./oceans status --all-existing-runtimes
+```

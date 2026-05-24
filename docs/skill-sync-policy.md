@@ -13,6 +13,8 @@ custom   -> explicit path only
 
 Default `setup` and `install` target Codex only. `install -Runtime <runtime>` targets one runtime and creates that runtime root if needed. `install -AllExistingRuntimes` installs only into known runtime roots that already exist.
 
+`status` is report-only. It lists known runtime roots and managed oceans777 skill counts without creating, deleting, or installing anything. `status -Runtime <runtime>` inspects one runtime, and `status -AllExistingRuntimes` limits the report to roots that already exist.
+
 The installer manages only skills installed from oceans777 repositories. It must not delete local private skills.
 
 Before replacing a managed skill, the installer resolves the install root and target skill path to absolute paths and verifies the target path is inside the install root.

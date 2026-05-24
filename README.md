@@ -86,7 +86,7 @@ Normal users only need setup plus these daily commands. `import` is a report for
 
 `oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, third-party attribution files, and cross-repository skill name uniqueness.
 
-`oceans.ps1 status` and `./oceans status` show Git status, submodule status, and local install target information.
+`oceans.ps1 status` and `./oceans status` show Git status, submodule status, known runtime skill roots, and managed oceans777 skill counts. Use `-Runtime` / `--runtime` to inspect one runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` to show only roots that already exist.
 
 `oceans.ps1 import` and `./oceans import` scan existing local skill roots for Codex, agents, Claude, OpenClaw, and Hermes, then print a review report for deciding what can be moved into oceans777 repositories. The import command is report-only: it does not copy files, delete files, commit, or push.
 
@@ -233,6 +233,24 @@ Ubuntu and macOS:
 ```
 
 The installer does not delete local private skills and does not create missing non-Codex runtime directories unless you explicitly target that runtime.
+
+Inspect runtime skill roots without installing:
+
+Windows:
+
+```powershell
+.\oceans.ps1 status
+.\oceans.ps1 status -Runtime claude
+.\oceans.ps1 status -AllExistingRuntimes
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans status
+./oceans status --runtime claude
+./oceans status --all-existing-runtimes
+```
 
 ## Local-First Duplicate Policy
 
