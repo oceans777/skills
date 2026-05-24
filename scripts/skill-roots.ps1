@@ -32,44 +32,41 @@ function Get-OceansSkillRuntimeDefinitions {
     [PSCustomObject]@{
       Runtime = "codex"
       EnvName = "CODEX_HOME"
-      CandidateRoots = @(
-        $(if ($env:CODEX_HOME) { Join-Path $env:CODEX_HOME "skills" }),
-        (Join-OceansPath -Parts @($UserHome, ".codex", "skills"))
-      ) | Where-Object { $_ }
+      CandidateRoots = if ($env:CODEX_HOME) { @(Join-Path $env:CODEX_HOME "skills") } else { @((Join-OceansPath -Parts @($UserHome, ".codex", "skills"))) }
     },
     [PSCustomObject]@{
       Runtime = "agents"
       EnvName = "AGENTS_HOME"
-      CandidateRoots = @(
-        $(if ($env:AGENTS_HOME) { Join-Path $env:AGENTS_HOME "skills" }),
-        (Join-OceansPath -Parts @($UserHome, ".agents", "skills"))
-      ) | Where-Object { $_ }
+      CandidateRoots = if ($env:AGENTS_HOME) { @(Join-Path $env:AGENTS_HOME "skills") } else { @((Join-OceansPath -Parts @($UserHome, ".agents", "skills"))) }
     },
     [PSCustomObject]@{
       Runtime = "claude"
       EnvName = "CLAUDE_HOME"
-      CandidateRoots = @(
-        $(if ($env:CLAUDE_HOME) { Join-Path $env:CLAUDE_HOME "skills" }),
-        (Join-OceansPath -Parts @($UserHome, ".claude", "skills"))
-      ) | Where-Object { $_ }
+      CandidateRoots = if ($env:CLAUDE_HOME) { @(Join-Path $env:CLAUDE_HOME "skills") } else { @((Join-OceansPath -Parts @($UserHome, ".claude", "skills"))) }
     },
     [PSCustomObject]@{
       Runtime = "openclaw"
       EnvName = "OPENCLAW_HOME"
-      CandidateRoots = @(
-        $(if ($env:OPENCLAW_HOME) { Join-Path $env:OPENCLAW_HOME "skills" }),
-        (Join-OceansPath -Parts @($UserHome, ".openclaw", "skills")),
-        (Join-OceansPath -Parts @($UserHome, ".config", "openclaw", "skills"))
-      ) | Where-Object { $_ }
+      CandidateRoots = if ($env:OPENCLAW_HOME) {
+        @(Join-Path $env:OPENCLAW_HOME "skills")
+      } else {
+        @(
+          (Join-OceansPath -Parts @($UserHome, ".openclaw", "skills")),
+          (Join-OceansPath -Parts @($UserHome, ".config", "openclaw", "skills"))
+        )
+      }
     },
     [PSCustomObject]@{
       Runtime = "hermes"
       EnvName = "HERMES_HOME"
-      CandidateRoots = @(
-        $(if ($env:HERMES_HOME) { Join-Path $env:HERMES_HOME "skills" }),
-        (Join-OceansPath -Parts @($UserHome, ".hermes", "skills")),
-        (Join-OceansPath -Parts @($UserHome, ".config", "hermes", "skills"))
-      ) | Where-Object { $_ }
+      CandidateRoots = if ($env:HERMES_HOME) {
+        @(Join-Path $env:HERMES_HOME "skills")
+      } else {
+        @(
+          (Join-OceansPath -Parts @($UserHome, ".hermes", "skills")),
+          (Join-OceansPath -Parts @($UserHome, ".config", "hermes", "skills"))
+        )
+      }
     }
   )
 }

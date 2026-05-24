@@ -16,26 +16,29 @@ runtime_candidates() {
 
   case "$runtime" in
     codex)
-      if [ -n "${CODEX_HOME:-}" ]; then printf '%s\n' "$CODEX_HOME/skills"; fi
-      printf '%s\n' "$home/.codex/skills"
+      if [ -n "${CODEX_HOME:-}" ]; then printf '%s\n' "$CODEX_HOME/skills"; else printf '%s\n' "$home/.codex/skills"; fi
       ;;
     agents)
-      if [ -n "${AGENTS_HOME:-}" ]; then printf '%s\n' "$AGENTS_HOME/skills"; fi
-      printf '%s\n' "$home/.agents/skills"
+      if [ -n "${AGENTS_HOME:-}" ]; then printf '%s\n' "$AGENTS_HOME/skills"; else printf '%s\n' "$home/.agents/skills"; fi
       ;;
     claude)
-      if [ -n "${CLAUDE_HOME:-}" ]; then printf '%s\n' "$CLAUDE_HOME/skills"; fi
-      printf '%s\n' "$home/.claude/skills"
+      if [ -n "${CLAUDE_HOME:-}" ]; then printf '%s\n' "$CLAUDE_HOME/skills"; else printf '%s\n' "$home/.claude/skills"; fi
       ;;
     openclaw)
-      if [ -n "${OPENCLAW_HOME:-}" ]; then printf '%s\n' "$OPENCLAW_HOME/skills"; fi
-      printf '%s\n' "$home/.openclaw/skills"
-      printf '%s\n' "$home/.config/openclaw/skills"
+      if [ -n "${OPENCLAW_HOME:-}" ]; then
+        printf '%s\n' "$OPENCLAW_HOME/skills"
+      else
+        printf '%s\n' "$home/.openclaw/skills"
+        printf '%s\n' "$home/.config/openclaw/skills"
+      fi
       ;;
     hermes)
-      if [ -n "${HERMES_HOME:-}" ]; then printf '%s\n' "$HERMES_HOME/skills"; fi
-      printf '%s\n' "$home/.hermes/skills"
-      printf '%s\n' "$home/.config/hermes/skills"
+      if [ -n "${HERMES_HOME:-}" ]; then
+        printf '%s\n' "$HERMES_HOME/skills"
+      else
+        printf '%s\n' "$home/.hermes/skills"
+        printf '%s\n' "$home/.config/hermes/skills"
+      fi
       ;;
     *)
       echo "unsupported-runtime: $runtime" >&2

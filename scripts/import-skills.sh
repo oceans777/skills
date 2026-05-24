@@ -3,14 +3,13 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
-SOURCE_ROOT=${CODEX_HOME:+$CODEX_HOME/skills}
+SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
+
+SOURCE_ROOT=
+RUNTIME=
 FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 FORMAT=text
-
-if [ -z "${SOURCE_ROOT:-}" ]; then
-  SOURCE_ROOT=$HOME/.codex/skills
-fi
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -20,6 +19,14 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       SOURCE_ROOT=$2
+      shift 2
+      ;;
+    --runtime)
+      if [ "$#" -lt 2 ]; then
+        echo "--runtime needs a value." >&2
+        exit 2
+      fi
+      RUNTIME=$2
       shift 2
       ;;
     --format)
@@ -58,12 +65,58 @@ if [ "$FORMAT" != "text" ]; then
   exit 2
 fi
 
-if [ ! -d "$SOURCE_ROOT" ]; then
-  echo "Local skills root does not exist: $SOURCE_ROOT" >&2
-  exit 1
+ROOTS_FILE=${TMPDIR:-/tmp}/oceans-import-roots.$$
+RECORDS_FILE=${TMPDIR:-/tmp}/oceans-import-records.$$
+: > "$ROOTS_FILE"
+: > "$RECORDS_FILE"
+
+cleanup_import_roots() {
+  rm -f "$ROOTS_FILE" "$RECORDS_FILE"
+}
+trap cleanup_import_roots EXIT INT TERM
+
+add_scan_root() {
+  runtime=$1
+  root_path=$2
+
+  if [ ! -d "$root_path" ]; then
+    echo "Local skills root does not exist: $root_path" >&2
+    exit 1
+  fi
+
+  root_real=$(absolute_path "$root_path")
+  printf '%s|%s\n' "$runtime" "$root_real" >> "$ROOTS_FILE"
+}
+
+add_first_existing_runtime_root() {
+  runtime=$1
+  candidates=$(runtime_candidates "$runtime")
+  while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    candidate_real=$(absolute_path "$candidate")
+    if [ -d "$candidate_real" ]; then
+      add_scan_root "$runtime" "$candidate_real"
+      return
+    fi
+  done <<EOF
+$candidates
+EOF
+}
+
+if [ -n "$SOURCE_ROOT" ]; then
+  add_scan_root custom "$SOURCE_ROOT"
+elif [ -n "$RUNTIME" ]; then
+  add_first_existing_runtime_root "$RUNTIME"
+else
+  for known_runtime in codex agents claude openclaw hermes; do
+    add_first_existing_runtime_root "$known_runtime"
+  done
 fi
 
-SOURCE_ROOT_REAL=$(CDPATH= cd "$SOURCE_ROOT" && pwd -P)
+if [ ! -s "$ROOTS_FILE" ]; then
+  echo "No local skill roots found. Create a supported runtime skills directory or pass --source-root." >&2
+  exit 1
+fi
 
 repository_match() {
   skill_name=$1
@@ -120,15 +173,28 @@ print_risks() {
 
 print_item() {
   skill_path=$1
+  runtime=$2
+  source_root=$3
+  local_runtime_match=$4
   skill_name=${skill_path##*/}
   repository_match_value=$(repository_match "$skill_name")
+  duplicate_local_runtime=0
+  case "$local_runtime_match" in
+    *", "*)
+      duplicate_local_runtime=1
+      ;;
+  esac
 
   echo "- $skill_name"
+  echo "  runtime: $runtime"
+  echo "  source_root: $source_root"
+  echo "  source_path: $skill_path"
 
   if [ "$skill_name" = ".system" ]; then
     echo "  status: skip-system"
     echo "  destination: do not publish"
     echo "  repository_match: $repository_match_value"
+    echo "  local_runtime_match: $local_runtime_match"
     echo "  action: do not publish"
     echo "  reason: Codex system skills are not oceans777 source skills."
     echo "  risk: not scanned"
@@ -139,6 +205,7 @@ print_item() {
     echo "  status: missing-skill-md"
     echo "  destination: manual repair before import"
     echo "  repository_match: $repository_match_value"
+    echo "  local_runtime_match: $local_runtime_match"
     echo "  action: repair SKILL.md before deciding whether to publish"
     echo "  reason: A publishable skill must include SKILL.md."
     print_risks "$skill_path"
@@ -151,6 +218,7 @@ print_item() {
       echo "  status: already-managed"
       echo "  destination: repos/oceans-skills/skills/$skill_name"
       echo "  repository_match: $repository_match_value"
+      echo "  local_runtime_match: $local_runtime_match"
       echo "  action: managed by oceans777; install may update it"
       echo "  reason: Local skill has an oceans777 first-party source marker."
       print_risks "$skill_path"
@@ -159,21 +227,31 @@ print_item() {
       echo "  status: already-managed"
       echo "  destination: repos/community-skills/skills/$skill_name"
       echo "  repository_match: $repository_match_value"
+      echo "  local_runtime_match: $local_runtime_match"
       echo "  action: managed by oceans777; install may update it"
       echo "  reason: Local skill has an oceans777 community source marker."
       print_risks "$skill_path"
       ;;
     *)
-      if [ "$repository_match_value" != "none" ]; then
+      if [ "$duplicate_local_runtime" -eq 1 ]; then
+        echo "  status: duplicate-local-runtime"
+        echo "  destination: choose one local runtime source before staging"
+        echo "  repository_match: $repository_match_value"
+        echo "  local_runtime_match: $local_runtime_match"
+        echo "  action: stage with an explicit runtime or source root after review"
+        echo "  reason: The same local skill folder name exists in more than one runtime root."
+      elif [ "$repository_match_value" != "none" ]; then
         echo "  status: duplicate-local-wins"
         echo "  destination: local skill stays installed"
         echo "  repository_match: $repository_match_value"
+        echo "  local_runtime_match: $local_runtime_match"
         echo "  action: keep local skill; repository version will not overwrite it"
         echo "  reason: A repository skill has the same name, but this local skill has no oceans777 source marker."
       else
         echo "  status: review-source"
         echo "  destination: oceans-skills if you created it; community-skills if third-party; do not publish if private"
         echo "  repository_match: $repository_match_value"
+        echo "  local_runtime_match: $local_runtime_match"
         echo "  action: review source before publishing"
         echo "  reason: No oceans777 source marker found."
       fi
@@ -183,23 +261,45 @@ print_item() {
 }
 
 echo "oceans777 local skill import report"
-echo "Source root: $SOURCE_ROOT_REAL"
+echo "Source roots:"
+while IFS='|' read -r runtime source_root; do
+  [ -n "$runtime" ] || continue
+  echo "  $runtime: $source_root"
+done < "$ROOTS_FILE"
 echo "First-party target: $FIRST_PARTY_ROOT"
 echo "Community target: $COMMUNITY_ROOT"
 echo "Mode: report only"
 echo "No files were copied."
 echo
 
+while IFS='|' read -r runtime source_root; do
+  [ -n "$runtime" ] || continue
+  for skill_path in "$source_root"/* "$source_root"/.[!.]* "$source_root"/..?*; do
+    [ -d "$skill_path" ] || continue
+    skill_name=${skill_path##*/}
+    [ "$skill_name" != "." ] || continue
+    [ "$skill_name" != ".." ] || continue
+    printf '%s|%s|%s|%s\n' "$skill_name" "$runtime" "$source_root" "$skill_path" >> "$RECORDS_FILE"
+  done
+done < "$ROOTS_FILE"
+
 found=0
-for skill_path in "$SOURCE_ROOT_REAL"/* "$SOURCE_ROOT_REAL"/.[!.]* "$SOURCE_ROOT_REAL"/..?*; do
-  [ -d "$skill_path" ] || continue
-  skill_name=${skill_path##*/}
-  [ "$skill_name" != "." ] || continue
-  [ "$skill_name" != ".." ] || continue
+sort "$RECORDS_FILE" | while IFS='|' read -r skill_name runtime source_root skill_path; do
+  [ -n "$skill_name" ] || continue
   found=1
-  print_item "$skill_path"
+  local_runtime_match=$(awk -F'|' -v name="$skill_name" '
+    $1 == name && !seen[$2]++ {
+      if (out == "") {
+        out = $2
+      } else {
+        out = out ", " $2
+      }
+    }
+    END { print out }
+  ' "$RECORDS_FILE")
+  print_item "$skill_path" "$runtime" "$source_root" "$local_runtime_match"
 done
 
-if [ "$found" -eq 0 ]; then
+if [ ! -s "$RECORDS_FILE" ]; then
   echo "No local skill directories found."
 fi

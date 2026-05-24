@@ -84,4 +84,48 @@ assert_contains "$OUTPUT" "missing-skill-md"
 assert_contains "$OUTPUT" ".system"
 assert_contains "$OUTPUT" "skip-system"
 
+CODEX_HOME=$SANDBOX_ROOT/codex-home
+AGENTS_HOME=$SANDBOX_ROOT/agents-home
+CLAUDE_HOME=$SANDBOX_ROOT/claude-home
+export CODEX_HOME AGENTS_HOME CLAUDE_HOME
+mkdir -p "$CODEX_HOME/skills" "$AGENTS_HOME/skills" "$CLAUDE_HOME/skills"
+
+mkdir -p "$CODEX_HOME/skills/codex-only-skill"
+cat > "$CODEX_HOME/skills/codex-only-skill/SKILL.md" <<'EOF'
+---
+name: codex-only-skill
+description: Codex only.
+---
+EOF
+
+mkdir -p "$AGENTS_HOME/skills/shared-runtime-skill"
+cat > "$AGENTS_HOME/skills/shared-runtime-skill/SKILL.md" <<'EOF'
+---
+name: shared-runtime-skill
+description: Agents copy.
+---
+EOF
+
+mkdir -p "$CLAUDE_HOME/skills/shared-runtime-skill"
+cat > "$CLAUDE_HOME/skills/shared-runtime-skill/SKILL.md" <<'EOF'
+---
+name: shared-runtime-skill
+description: Claude copy.
+---
+EOF
+
+OUTPUT=$(sh "$REPO_ROOT/scripts/import-skills.sh" \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT")
+
+assert_contains "$OUTPUT" "Source roots:"
+assert_contains "$OUTPUT" "runtime: codex"
+assert_contains "$OUTPUT" "runtime: agents"
+assert_contains "$OUTPUT" "runtime: claude"
+assert_contains "$OUTPUT" "source_root: $CODEX_HOME/skills"
+assert_contains "$OUTPUT" "source_path: $AGENTS_HOME/skills/shared-runtime-skill"
+assert_contains "$OUTPUT" "shared-runtime-skill"
+assert_contains "$OUTPUT" "status: duplicate-local-runtime"
+assert_contains "$OUTPUT" "local_runtime_match: agents, claude"
+
 echo "Shell import test passed."

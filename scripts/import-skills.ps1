@@ -1,5 +1,7 @@
 param(
   [string] $SourceRoot,
+  [ValidateSet("codex", "agents", "claude", "openclaw", "hermes", "custom")]
+  [string] $Runtime,
   [string] $FirstPartySkillsRoot,
   [string] $CommunitySkillsRoot,
 
@@ -9,21 +11,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = Split-Path -Parent $ScriptRoot
+$RequestedSourceRoot = $SourceRoot
+$RequestedRuntime = $Runtime
+. (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
 
-if (-not $SourceRoot) {
-  if ($env:CODEX_HOME) {
-    $SourceRoot = Join-Path $env:CODEX_HOME "skills"
-  } else {
-    $SourceRoot = Join-Path $HOME ".codex\skills"
-  }
-}
-
-if (-not (Test-Path -LiteralPath $SourceRoot -PathType Container)) {
-  throw "Local skills root does not exist: $SourceRoot"
-}
-
-$ResolvedSourceRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $SourceRoot).Path)
 if (-not $FirstPartySkillsRoot) {
   $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
 }
@@ -34,6 +27,18 @@ if (-not $CommunitySkillsRoot) {
 
 $FirstPartyRoot = $FirstPartySkillsRoot
 $CommunityRoot = $CommunitySkillsRoot
+
+if ($RequestedSourceRoot) {
+  $SourceRoots = @(Get-OceansRuntimeRoot -Runtime "custom" -Path $RequestedSourceRoot -Operation "scan")
+} elseif ($RequestedRuntime) {
+  $SourceRoots = @(Get-OceansRuntimeRoot -Runtime $RequestedRuntime -Operation "scan")
+} else {
+  $SourceRoots = @(Get-OceansExistingSkillRoots)
+}
+
+if ($SourceRoots.Count -eq 0) {
+  throw "No local skill roots found. Create a supported runtime skills directory or pass SourceRoot."
+}
 
 function Get-RepositoryMatch {
   param([string] $SkillName)
@@ -109,19 +114,29 @@ function Get-RiskNotes {
 }
 
 function New-SkillReportItem {
-  param([System.IO.DirectoryInfo] $Directory)
+  param(
+    [System.IO.DirectoryInfo] $Directory,
+    [string] $Runtime,
+    [string] $SourceRoot,
+    [string] $LocalRuntimeMatch
+  )
 
   $Name = $Directory.Name
   $SkillPath = $Directory.FullName
   $SkillFile = Join-Path $SkillPath "SKILL.md"
   $RepositoryMatch = Get-RepositoryMatch -SkillName $Name
+  $HasLocalRuntimeDuplicate = (($LocalRuntimeMatch -split ", " | Where-Object { $_ }).Count -gt 1)
 
   if ($Name -eq ".system") {
     return [ordered]@{
       Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
       Status = "skip-system"
       Destination = "do not publish"
       RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "do not publish"
       Reason = "Codex system skills are not oceans777 source skills."
       Risks = @("risk: not scanned")
@@ -131,9 +146,13 @@ function New-SkillReportItem {
   if (-not (Test-Path -LiteralPath $SkillFile -PathType Leaf)) {
     return [ordered]@{
       Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
       Status = "missing-skill-md"
       Destination = "manual repair before import"
       RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "repair SKILL.md before deciding whether to publish"
       Reason = "A publishable skill must include SKILL.md."
       Risks = @(Get-RiskNotes -SkillPath $SkillPath)
@@ -144,9 +163,13 @@ function New-SkillReportItem {
   if ($ManagedSource -eq "oceans-skills") {
     return [ordered]@{
       Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
       Status = "already-managed"
       Destination = "repos/oceans-skills/skills/$Name"
       RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "managed by oceans777; install may update it"
       Reason = "Local skill has an oceans777 first-party source marker."
       Risks = @(Get-RiskNotes -SkillPath $SkillPath)
@@ -156,11 +179,31 @@ function New-SkillReportItem {
   if ($ManagedSource -eq "community-skills") {
     return [ordered]@{
       Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
       Status = "already-managed"
       Destination = "repos/community-skills/skills/$Name"
       RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "managed by oceans777; install may update it"
       Reason = "Local skill has an oceans777 community source marker."
+      Risks = @(Get-RiskNotes -SkillPath $SkillPath)
+    }
+  }
+
+  if ($HasLocalRuntimeDuplicate) {
+    return [ordered]@{
+      Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
+      Status = "duplicate-local-runtime"
+      Destination = "choose one local runtime source before staging"
+      RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
+      Action = "stage with an explicit runtime or source root after review"
+      Reason = "The same local skill folder name exists in more than one runtime root."
       Risks = @(Get-RiskNotes -SkillPath $SkillPath)
     }
   }
@@ -168,9 +211,13 @@ function New-SkillReportItem {
   if ($RepositoryMatch -ne "none") {
     return [ordered]@{
       Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
       Status = "duplicate-local-wins"
       Destination = "local skill stays installed"
       RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "keep local skill; repository version will not overwrite it"
       Reason = "A repository skill has the same name, but this local skill has no oceans777 source marker."
       Risks = @(Get-RiskNotes -SkillPath $SkillPath)
@@ -179,21 +226,53 @@ function New-SkillReportItem {
 
   return [ordered]@{
     Name = $Name
+    Runtime = $Runtime
+    SourceRoot = $SourceRoot
+    SourcePath = $SkillPath
     Status = "review-source"
     Destination = "oceans-skills if you created it; community-skills if third-party; do not publish if private"
     RepositoryMatch = $RepositoryMatch
+    LocalRuntimeMatch = $LocalRuntimeMatch
     Action = "review source before publishing"
     Reason = "No oceans777 source marker found."
     Risks = @(Get-RiskNotes -SkillPath $SkillPath)
   }
 }
 
-$Items = Get-ChildItem -LiteralPath $ResolvedSourceRoot -Directory -Force |
-  Sort-Object Name |
-  ForEach-Object { New-SkillReportItem -Directory $_ }
+$SkillRecords = foreach ($Root in $SourceRoots) {
+  Get-ChildItem -LiteralPath $Root.Path -Directory -Force |
+    ForEach-Object {
+      [PSCustomObject]@{
+        Directory = $_
+        Name = $_.Name
+        Runtime = $Root.Runtime
+        SourceRoot = $Root.Path
+      }
+    }
+}
+
+$LocalRuntimeMatches = @{}
+foreach ($Record in $SkillRecords) {
+  if (-not $LocalRuntimeMatches.ContainsKey($Record.Name)) {
+    $LocalRuntimeMatches[$Record.Name] = New-Object System.Collections.Generic.List[string]
+  }
+  if (-not $LocalRuntimeMatches[$Record.Name].Contains($Record.Runtime)) {
+    $LocalRuntimeMatches[$Record.Name].Add($Record.Runtime)
+  }
+}
+
+$Items = $SkillRecords |
+  Sort-Object Name, Runtime, SourceRoot |
+  ForEach-Object {
+    $RuntimeMatch = (@($LocalRuntimeMatches[$_.Name]) | Sort-Object) -join ", "
+    New-SkillReportItem -Directory $_.Directory -Runtime $_.Runtime -SourceRoot $_.SourceRoot -LocalRuntimeMatch $RuntimeMatch
+  }
 
 Write-Host "oceans777 local skill import report"
-Write-Host "Source root: $ResolvedSourceRoot"
+Write-Host "Source roots:"
+foreach ($Root in $SourceRoots) {
+  Write-Host "  $($Root.Runtime): $($Root.Path)"
+}
 Write-Host "First-party target: $FirstPartyRoot"
 Write-Host "Community target: $CommunityRoot"
 Write-Host "Mode: report only"
@@ -207,9 +286,13 @@ if ($Items.Count -eq 0) {
 
 foreach ($Item in $Items) {
   Write-Host "- $($Item.Name)"
+  Write-Host "  runtime: $($Item.Runtime)"
+  Write-Host "  source_root: $($Item.SourceRoot)"
+  Write-Host "  source_path: $($Item.SourcePath)"
   Write-Host "  status: $($Item.Status)"
   Write-Host "  destination: $($Item.Destination)"
   Write-Host "  repository_match: $($Item.RepositoryMatch)"
+  Write-Host "  local_runtime_match: $($Item.LocalRuntimeMatch)"
   Write-Host "  action: $($Item.Action)"
   Write-Host "  reason: $($Item.Reason)"
   foreach ($Risk in $Item.Risks) {

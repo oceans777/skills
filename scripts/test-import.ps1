@@ -80,6 +80,48 @@ try {
   Assert-Contains -Text $Output -Expected ".system"
   Assert-Contains -Text $Output -Expected "skip-system"
 
+  $CodexHome = Join-Path $SandboxRoot "codex-home"
+  $AgentsHome = Join-Path $SandboxRoot "agents-home"
+  $ClaudeHome = Join-Path $SandboxRoot "claude-home"
+  foreach ($Root in @($CodexHome, $AgentsHome, $ClaudeHome)) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Root "skills") | Out-Null
+  }
+
+  New-Item -ItemType Directory -Force -Path (Join-Path $CodexHome "skills\codex-only-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $CodexHome "skills\codex-only-skill\SKILL.md") -Value "---`nname: codex-only-skill`ndescription: Codex only.`n---`n" -Encoding UTF8
+
+  New-Item -ItemType Directory -Force -Path (Join-Path $AgentsHome "skills\shared-runtime-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $AgentsHome "skills\shared-runtime-skill\SKILL.md") -Value "---`nname: shared-runtime-skill`ndescription: Agents copy.`n---`n" -Encoding UTF8
+
+  New-Item -ItemType Directory -Force -Path (Join-Path $ClaudeHome "skills\shared-runtime-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $ClaudeHome "skills\shared-runtime-skill\SKILL.md") -Value "---`nname: shared-runtime-skill`ndescription: Claude copy.`n---`n" -Encoding UTF8
+
+  $OldCodexHome = $env:CODEX_HOME
+  $OldAgentsHome = $env:AGENTS_HOME
+  $OldClaudeHome = $env:CLAUDE_HOME
+  try {
+    $env:CODEX_HOME = $CodexHome
+    $env:AGENTS_HOME = $AgentsHome
+    $env:CLAUDE_HOME = $ClaudeHome
+    $Output = & "$RepoRoot\scripts\import-skills.ps1" `
+      -FirstPartySkillsRoot $FirstPartyRoot `
+      -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
+  } finally {
+    if ($null -eq $OldCodexHome) { Remove-Item Env:\CODEX_HOME -ErrorAction SilentlyContinue } else { $env:CODEX_HOME = $OldCodexHome }
+    if ($null -eq $OldAgentsHome) { Remove-Item Env:\AGENTS_HOME -ErrorAction SilentlyContinue } else { $env:AGENTS_HOME = $OldAgentsHome }
+    if ($null -eq $OldClaudeHome) { Remove-Item Env:\CLAUDE_HOME -ErrorAction SilentlyContinue } else { $env:CLAUDE_HOME = $OldClaudeHome }
+  }
+
+  Assert-Contains -Text $Output -Expected "Source roots:"
+  Assert-Contains -Text $Output -Expected "runtime: codex"
+  Assert-Contains -Text $Output -Expected "runtime: agents"
+  Assert-Contains -Text $Output -Expected "runtime: claude"
+  Assert-Contains -Text $Output -Expected "source_root: $(Join-Path $CodexHome "skills")"
+  Assert-Contains -Text $Output -Expected "source_path:"
+  Assert-Contains -Text $Output -Expected "shared-runtime-skill"
+  Assert-Contains -Text $Output -Expected "status: duplicate-local-runtime"
+  Assert-Contains -Text $Output -Expected "local_runtime_match: agents, claude"
+
   Write-Host "PowerShell import test passed."
 } finally {
   Remove-SandboxRoot
