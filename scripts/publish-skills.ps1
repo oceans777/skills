@@ -217,7 +217,10 @@ function Publish-ChildRepository {
   }
 
   Invoke-Git -Description "commit $Name skills" -Arguments @("-C", $Repo, "commit", "-m", $Message)
-  Invoke-Git -Description "push $Name main" -Arguments @("-C", $Repo, "push", "--quiet", "origin", "main")
+  Invoke-GitWithRetry `
+    -Description "push $Name main" `
+    -Arguments @("-C", $Repo, "push", "--quiet", "origin", "main") `
+    -DelaySeconds 1
 }
 
 if (-not $RepoRoot) {
@@ -298,5 +301,8 @@ Invoke-Git -Description "stage skill submodules" -Arguments @("-C", $RepoRoot, "
 if ((Test-StagedChangesUnderPath -Repo $RepoRoot -Path $FirstPartyRel) -or
     (Test-StagedChangesUnderPath -Repo $RepoRoot -Path $CommunityRel)) {
   Invoke-Git -Description "commit skill submodule updates" -Arguments @("-C", $RepoRoot, "commit", "-m", "repos: update skill submodules")
-  Invoke-Git -Description "push entry main" -Arguments @("-C", $RepoRoot, "push", "--quiet", "origin", "main")
+  Invoke-GitWithRetry `
+    -Description "push entry main" `
+    -Arguments @("-C", $RepoRoot, "push", "--quiet", "origin", "main") `
+    -DelaySeconds 1
 }

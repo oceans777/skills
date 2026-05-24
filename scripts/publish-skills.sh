@@ -194,7 +194,7 @@ publish_child_repository() {
   fi
 
   invoke_git "commit $name skills" -C "$repo" commit -m "$message"
-  invoke_git "push $name main" -C "$repo" push --quiet origin main
+  invoke_git_with_retry "push $name main" 3 1 -C "$repo" push --quiet origin main
 }
 
 while [ "$#" -gt 0 ]; do
@@ -285,5 +285,5 @@ invoke_git "stage skill submodules" -C "$REPO_ROOT" add "$FIRST_PARTY_REL" "$COM
 if staged_changes_under_path "$REPO_ROOT" "$FIRST_PARTY_REL" || \
    staged_changes_under_path "$REPO_ROOT" "$COMMUNITY_REL"; then
   invoke_git "commit skill submodule updates" -C "$REPO_ROOT" commit -m "repos: update skill submodules"
-  invoke_git "push entry main" -C "$REPO_ROOT" push --quiet origin main
+  invoke_git_with_retry "push entry main" 3 1 -C "$REPO_ROOT" push --quiet origin main
 fi
