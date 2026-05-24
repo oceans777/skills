@@ -70,8 +70,6 @@ Both approaches can result in all repositories being present locally. The setup 
 .\oceans.ps1 validate
 .\oceans.ps1 status
 .\oceans.ps1 import
-.\oceans.ps1 stage
-.\oceans.ps1 publish
 ```
 
 ### Ubuntu and macOS
@@ -82,9 +80,9 @@ Both approaches can result in all repositories being present locally. The setup 
 ./oceans validate
 ./oceans status
 ./oceans import
-./oceans stage
-./oceans publish
 ```
+
+Normal users only need setup plus these commands. `import` is a report-only review command; `stage` and `publish` are maintainer-only commands for publishing open-source skills.
 
 ## Command Reference
 
@@ -98,11 +96,9 @@ Both approaches can result in all repositories being present locally. The setup 
 
 `import` scans local Codex skills and prints a review-only classification report. It never copies, deletes, commits, or pushes files.
 
-`stage` copies one explicitly named local skill into either `repos/oceans-skills` or `repos/community-skills` after validation and safety checks.
-
-`publish` validates staged skill changes, commits child repository skill updates when needed, updates submodule pins in the entry repository, and pushes normal `main` branches. It never force-pushes.
-
 ## Maintainer Publishing Flow
+
+This flow is for maintainers publishing open-source skills into `repos/oceans-skills` or `repos/community-skills`. Normal users do not need `stage` or `publish`.
 
 Review local skills:
 
@@ -145,6 +141,8 @@ Ubuntu and macOS:
 ```sh
 ./oceans publish
 ```
+
+`stage` copies one explicitly named local skill into a target repository after validation and safety checks. `publish` validates staged skill changes, commits child repository skill updates when needed, updates submodule pins in the entry repository, and pushes normal `main` branches.
 
 Safety defaults:
 

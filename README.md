@@ -62,8 +62,6 @@ skills/
 .\oceans.ps1 validate
 .\oceans.ps1 status
 .\oceans.ps1 import
-.\oceans.ps1 stage
-.\oceans.ps1 publish
 ```
 
 ### Ubuntu and macOS
@@ -74,9 +72,9 @@ skills/
 ./oceans validate
 ./oceans status
 ./oceans import
-./oceans stage
-./oceans publish
 ```
+
+Normal users only need setup plus these daily commands. `import` is a report for reviewing local skills; `stage` and `publish` are maintainer-only commands for publishing open-source skills.
 
 ## What The Commands Do
 
@@ -92,11 +90,9 @@ skills/
 
 `oceans.ps1 import` and `./oceans import` scan your local Codex skills and print a review report for deciding what can be moved into oceans777 repositories. The import command is report-only: it does not copy files, delete files, commit, or push.
 
-`oceans.ps1 stage` and `./oceans stage` copy one explicitly named local skill into either the first-party or community repository after safety checks.
-
-`oceans.ps1 publish` and `./oceans publish` validate staged skill changes, commit child repository updates when needed, update submodule pins, and push normal `main` branches. It never force-pushes.
-
 ## Maintainer Skill Publishing
+
+This flow is for maintainers publishing open-source skills into the oceans777 first-party or community repositories. Normal users do not need `stage` or `publish`.
 
 Review local skills first:
 
@@ -139,6 +135,8 @@ Ubuntu and macOS:
 ```sh
 ./oceans publish
 ```
+
+`stage` copies one explicitly named local skill into either the first-party or community repository after safety checks. `publish` validates staged skill changes, commits child repository updates when needed, updates submodule pins, and pushes normal `main` branches.
 
 Publishing safety defaults:
 
