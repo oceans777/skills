@@ -269,6 +269,19 @@ assert_contains "$OUTPUT" "risk_status: none detected"
 assert_path_exists "$FIRST_PARTY_ROOT/route-skill/SKILL.md"
 assert_path_missing "$FIRST_PARTY_ROOT/route-skill/data/__pycache__/cache.pyc"
 
+new_fixture missing-license-risk
+mkdir -p "$SOURCE_ROOT/missing-license-skill"
+cat > "$SOURCE_ROOT/missing-license-skill/SKILL.md" <<'EOF'
+---
+name: missing-license-skill
+description: Missing license reference.
+license: Complete terms in LICENSE.txt
+---
+EOF
+OUTPUT=$(run_stage_failure_common missing-license-skill oceans)
+assert_contains "$OUTPUT" "risk-blocked: missing-license-skill"
+assert_contains "$OUTPUT" "risk: missing referenced license file"
+
 new_fixture large-risk
 mkdir -p "$SOURCE_ROOT/large-skill"
 cat > "$SOURCE_ROOT/large-skill/SKILL.md" <<'EOF'

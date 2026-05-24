@@ -94,6 +94,17 @@ try {
   Assert-Contains -Text $Output -Expected ".system"
   Assert-Contains -Text $Output -Expected "skip-system"
 
+  $LicenseRoot = Join-Path $SandboxRoot "license-local-skills"
+  $LicenseSkill = Join-Path $LicenseRoot "missing-license-skill"
+  New-Item -ItemType Directory -Force -Path $LicenseSkill | Out-Null
+  Set-Content -LiteralPath (Join-Path $LicenseSkill "SKILL.md") -Value "---`nname: missing-license-skill`ndescription: Missing license reference.`nlicense: Complete terms in LICENSE.txt`n---`n" -Encoding UTF8
+  $LicenseOutput = & "$RepoRoot\scripts\import-skills.ps1" `
+    -SourceRoot $LicenseRoot `
+    -FirstPartySkillsRoot $FirstPartyRoot `
+    -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
+  Assert-Contains -Text $LicenseOutput -Expected "missing-license-skill"
+  Assert-Contains -Text $LicenseOutput -Expected "risk: missing referenced license file"
+
   $BenignRoot = Join-Path $SandboxRoot "benign-local-skills"
   $BenignSkill = Join-Path $BenignRoot "benign-route-skill"
   New-Item -ItemType Directory -Force -Path (Join-Path $BenignSkill "data\__pycache__") | Out-Null

@@ -6,6 +6,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $ScriptRoot "skill-publish-rules.ps1")
 $Failures = New-Object System.Collections.Generic.List[string]
 
 if (-not $FirstPartySkillsRoot) {
@@ -48,6 +50,8 @@ function Test-SkillDirectory {
 
     if (-not (Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") -PathType Leaf)) {
       $Failures.Add("Missing SKILL.md in ${RepositoryName}: $($_.Name)")
+    } elseif (Test-OceansMissingLicenseReference -SkillPath $_.FullName) {
+      $Failures.Add("Missing referenced license file in ${RepositoryName}: $($_.Name)")
     }
 
     if ($RequireUpstream) {

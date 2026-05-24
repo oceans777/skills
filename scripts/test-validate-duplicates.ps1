@@ -96,6 +96,16 @@ try {
   Assert-Contains -Text $Result.Output -Expected "Missing or empty UPSTREAM.md in community-skills: empty-attribution-skill"
   Assert-Contains -Text $Result.Output -Expected "Missing or empty PATCHES.md in community-skills: empty-attribution-skill"
   Assert-Contains -Text $Result.Output -Expected "Missing or empty LICENSE in community-skills: empty-attribution-skill"
+
+  $MissingLicenseRef = Join-Path $FirstPartyRoot "missing-license-reference"
+  New-Item -ItemType Directory -Force -Path $MissingLicenseRef | Out-Null
+  Set-Content -LiteralPath (Join-Path $MissingLicenseRef "SKILL.md") -Value "---`nname: missing-license-reference`ndescription: Missing license reference.`nlicense: Complete terms in LICENSE.txt`n---`n" -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  if ($Result.ExitCode -eq 0) {
+    throw "Expected validate to fail for missing referenced license file."
+  }
+  Assert-Contains -Text $Result.Output -Expected "Missing referenced license file in oceans-skills: missing-license-reference"
+
   Write-Host "PowerShell validate duplicate test passed."
 } finally {
   Remove-TestRoot

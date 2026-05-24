@@ -3,6 +3,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
+. "$SCRIPT_DIR/skill-publish-rules.sh"
 FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_SKILLS_ROOT=$REPO_ROOT/repos/community-skills/skills
 failures=0
@@ -59,6 +60,8 @@ test_skill_directory() {
 
     if [ ! -f "$skill_path/SKILL.md" ]; then
       add_failure "Missing SKILL.md in $repository_name: $skill_name"
+    elif oceans_missing_license_reference "$skill_path"; then
+      add_failure "Missing referenced license file in $repository_name: $skill_name"
     fi
 
     if [ -L "$skill_path" ]; then

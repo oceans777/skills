@@ -97,6 +97,22 @@ assert_contains "$OUTPUT" "missing-skill-md"
 assert_contains "$OUTPUT" ".system"
 assert_contains "$OUTPUT" "skip-system"
 
+LICENSE_ROOT=$SANDBOX_ROOT/license-local-skills
+mkdir -p "$LICENSE_ROOT/missing-license-skill"
+cat > "$LICENSE_ROOT/missing-license-skill/SKILL.md" <<'EOF'
+---
+name: missing-license-skill
+description: Missing license reference.
+license: Complete terms in LICENSE.txt
+---
+EOF
+OUTPUT=$(sh "$REPO_ROOT/scripts/import-skills.sh" \
+  --source-root "$LICENSE_ROOT" \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT")
+assert_contains "$OUTPUT" "missing-license-skill"
+assert_contains "$OUTPUT" "risk: missing referenced license file"
+
 BENIGN_ROOT=$SANDBOX_ROOT/benign-local-skills
 mkdir -p "$BENIGN_ROOT/benign-route-skill/data/__pycache__"
 cat > "$BENIGN_ROOT/benign-route-skill/SKILL.md" <<'EOF'

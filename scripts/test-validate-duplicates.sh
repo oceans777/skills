@@ -73,4 +73,18 @@ assert_contains "$OUTPUT" "Missing or empty UPSTREAM.md in community-skills: emp
 assert_contains "$OUTPUT" "Missing or empty PATCHES.md in community-skills: empty-attribution-skill"
 assert_contains "$OUTPUT" "Missing or empty LICENSE in community-skills: empty-attribution-skill"
 
+mkdir -p "$FIRST_PARTY_ROOT/missing-license-reference"
+cat > "$FIRST_PARTY_ROOT/missing-license-reference/SKILL.md" <<'EOF'
+---
+name: missing-license-reference
+description: Missing license reference.
+license: Complete terms in LICENSE.txt
+---
+EOF
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected validate to fail for missing referenced license file." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "Missing referenced license file in oceans-skills: missing-license-reference"
+
 echo "Shell validate duplicate test passed."

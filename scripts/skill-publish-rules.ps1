@@ -23,12 +23,50 @@ function Test-OceansExcludedRelativePath {
   return $false
 }
 
+function Test-OceansMissingLicenseReference {
+  param([Parameter(Mandatory = $true)][string] $SkillPath)
+
+  $SkillFile = Join-Path $SkillPath "SKILL.md"
+  if (-not (Test-Path -LiteralPath $SkillFile -PathType Leaf)) {
+    return $false
+  }
+
+  $Lines = @(Get-Content -LiteralPath $SkillFile -ErrorAction SilentlyContinue)
+  if ($Lines.Count -eq 0 -or $Lines[0].Trim() -ne "---") {
+    return $false
+  }
+
+  for ($Index = 1; $Index -lt $Lines.Count; $Index++) {
+    $Line = $Lines[$Index]
+    if ($Line.Trim() -eq "---") {
+      break
+    }
+
+    if ($Line -match '^\s*license\s*:\s*(.+?)\s*$') {
+      $LicenseValue = $Matches[1]
+      $References = [regex]::Matches($LicenseValue, '\bLICENSE(?:\.[A-Za-z0-9._-]+)?\b') |
+        ForEach-Object { $_.Value }
+      foreach ($Reference in $References) {
+        if (-not (Test-Path -LiteralPath (Join-Path $SkillPath $Reference) -PathType Leaf)) {
+          return $true
+        }
+      }
+    }
+  }
+
+  return $false
+}
+
 function Get-OceansSkillRiskNotes {
   param([Parameter(Mandatory = $true)][string] $SkillPath)
 
   $Risks = New-Object System.Collections.Generic.List[string]
   $SourceAbs = Resolve-Path -LiteralPath $SkillPath
   $SourcePath = [System.IO.Path]::GetFullPath($SourceAbs.Path)
+
+  if (Test-OceansMissingLicenseReference -SkillPath $SourcePath) {
+    $Risks.Add("risk: missing referenced license file")
+  }
 
   $Files = Get-ChildItem -LiteralPath $SourcePath -File -Recurse -Force -ErrorAction SilentlyContinue
   foreach ($File in $Files) {

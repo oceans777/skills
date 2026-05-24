@@ -278,6 +278,14 @@ try {
   Assert-PathExists -Path (Join-Path $Fixture.FirstPartyRoot "route-skill\SKILL.md")
   Assert-PathMissing -Path (Join-Path $Fixture.FirstPartyRoot "route-skill\data\__pycache__\cache.pyc")
 
+  $Fixture = New-Fixture -Name "missing-license-risk"
+  New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "missing-license-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "missing-license-skill\SKILL.md") -Value "---`nname: missing-license-skill`ndescription: Missing license reference.`nlicense: Complete terms in LICENSE.txt`n---`n" -Encoding UTF8
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "missing-license-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
+  Assert-Contains -Text $Output -Expected "risk-blocked: missing-license-skill"
+  Assert-Contains -Text $Output -Expected "risk: missing referenced license file"
+
   $Fixture = New-Fixture -Name "large-risk"
   New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "large-skill") | Out-Null
   Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "large-skill\SKILL.md") -Value "---`nname: large-skill`ndescription: Large file skill.`n---`n" -Encoding UTF8
