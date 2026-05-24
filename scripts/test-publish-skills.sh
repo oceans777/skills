@@ -151,12 +151,23 @@ run_publish() {
     exit 1
   fi
 
+  publish_env_home=$FIXTURE_ROOT/publish-env-home
+  mkdir -p "$publish_env_home/.config"
+
   set +e
-  output=$(sh "$PUBLISH_SCRIPT" \
-    --repo-root "$ENTRY_REPO" \
-    --first-party-repo "$FIRST_PARTY_REPO" \
-    --community-repo "$COMMUNITY_REPO" \
-    "$@" 2>&1)
+  output=$(
+    cd "$ENTRY_REPO" && \
+    GIT_TERMINAL_PROMPT=0 \
+    HOME="$publish_env_home" \
+    USERPROFILE="$publish_env_home" \
+    XDG_CONFIG_HOME="$publish_env_home/.config" \
+    GIT_CONFIG_GLOBAL="$publish_env_home/.gitconfig" \
+    sh "$PUBLISH_SCRIPT" \
+      --repo-root "$ENTRY_REPO" \
+      --first-party-repo "$FIRST_PARTY_REPO" \
+      --community-repo "$COMMUNITY_REPO" \
+      "$@" 2>&1
+  )
   status=$?
   set -e
 
@@ -254,6 +265,7 @@ assert_published_child_and_entry() {
   assert_not_equal "$new_child_head" "$old_child_head" "Expected child repository to receive a commit."
   assert_not_equal "$new_entry_head" "$old_entry_head" "Expected entry repository to receive a submodule pointer commit."
   assert_equal "$(get_remote_main "$child_repo")" "$new_child_head" "Expected child commit to be pushed."
+  assert_equal "$(get_remote_main "$ENTRY_REPO")" "$new_entry_head" "Expected entry commit to be pushed."
   assert_equal "$(get_submodule_pointer "$ENTRY_REPO" "$submodule_path")" "$new_child_head" "Expected entry submodule pointer to reference child HEAD."
   assert_git_clean "$child_repo"
   assert_git_clean "$ENTRY_REPO"

@@ -237,8 +237,35 @@ function Invoke-Publish {
     $Arguments += "-DryRun"
   }
 
-  $Output = & powershell @Arguments *>&1 | Out-String
-  $ExitCode = $LASTEXITCODE
+  $EnvHome = Join-Path $Fixture.Root "publish-env-home"
+  $EnvConfigHome = Join-Path $EnvHome ".config"
+  New-Item -ItemType Directory -Force -Path $EnvConfigHome | Out-Null
+
+  $OldLocation = Get-Location
+  $OldGitTerminalPrompt = $env:GIT_TERMINAL_PROMPT
+  $OldHome = $env:HOME
+  $OldUserProfile = $env:USERPROFILE
+  $OldXdgConfigHome = $env:XDG_CONFIG_HOME
+  $OldGitConfigGlobal = $env:GIT_CONFIG_GLOBAL
+
+  try {
+    $env:GIT_TERMINAL_PROMPT = "0"
+    $env:HOME = $EnvHome
+    $env:USERPROFILE = $EnvHome
+    $env:XDG_CONFIG_HOME = $EnvConfigHome
+    $env:GIT_CONFIG_GLOBAL = Join-Path $EnvHome ".gitconfig"
+    Set-Location -LiteralPath $Fixture.EntryRepo
+    $Output = & powershell @Arguments *>&1 | Out-String
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    Set-Location -LiteralPath $OldLocation
+    if ($null -eq $OldGitTerminalPrompt) { Remove-Item Env:\GIT_TERMINAL_PROMPT -ErrorAction SilentlyContinue } else { $env:GIT_TERMINAL_PROMPT = $OldGitTerminalPrompt }
+    if ($null -eq $OldHome) { Remove-Item Env:\HOME -ErrorAction SilentlyContinue } else { $env:HOME = $OldHome }
+    if ($null -eq $OldUserProfile) { Remove-Item Env:\USERPROFILE -ErrorAction SilentlyContinue } else { $env:USERPROFILE = $OldUserProfile }
+    if ($null -eq $OldXdgConfigHome) { Remove-Item Env:\XDG_CONFIG_HOME -ErrorAction SilentlyContinue } else { $env:XDG_CONFIG_HOME = $OldXdgConfigHome }
+    if ($null -eq $OldGitConfigGlobal) { Remove-Item Env:\GIT_CONFIG_GLOBAL -ErrorAction SilentlyContinue } else { $env:GIT_CONFIG_GLOBAL = $OldGitConfigGlobal }
+  }
+
   if ($ExpectFailure) {
     if ($ExitCode -eq 0) {
       throw "Expected publish-skills.ps1 to fail. Output:`n$Output"
@@ -341,6 +368,7 @@ function Assert-PublishedChildAndEntry {
   Assert-NotEqual -Actual $NewChildHead -Unexpected $OldChildHead -Message "Expected child repository to receive a commit."
   Assert-NotEqual -Actual $NewEntryHead -Unexpected $OldEntryHead -Message "Expected entry repository to receive a submodule pointer commit."
   Assert-Equal -Actual (Get-RemoteMain -RepoPath $ChildRepo) -Expected $NewChildHead -Message "Expected child commit to be pushed."
+  Assert-Equal -Actual (Get-RemoteMain -RepoPath $Fixture.EntryRepo) -Expected $NewEntryHead -Message "Expected entry commit to be pushed."
   Assert-Equal -Actual (Get-SubmodulePointer -EntryRepo $Fixture.EntryRepo -SubmodulePath $SubmodulePath) -Expected $NewChildHead -Message "Expected entry submodule pointer to reference child HEAD."
   Assert-GitClean -RepoPath $ChildRepo
   Assert-GitClean -RepoPath $Fixture.EntryRepo
