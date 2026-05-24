@@ -61,11 +61,15 @@ switch ($Command) {
   }
   "help" {
     Write-Host "oceans777 skills commands:"
+    Write-Host ""
+    Write-Host "Daily user commands:"
     Write-Host "  .\oceans.ps1 sync      Pull updates and check out pinned child repositories"
     Write-Host "  .\oceans.ps1 install   Install skills locally"
     Write-Host "  .\oceans.ps1 validate  Validate repository and skill structure"
     Write-Host "  .\oceans.ps1 status    Show repository and install status"
     Write-Host "  .\oceans.ps1 import    Scan local skills and print an import review report"
+    Write-Host ""
+    Write-Host "Maintainer publishing commands:"
     Write-Host "  .\oceans.ps1 stage     Stage one local skill into an oceans777 repository"
     Write-Host "  .\oceans.ps1 publish   Validate, commit, and push staged skill repository changes"
   }
