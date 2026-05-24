@@ -134,6 +134,35 @@ function Test-ExcludedRelativePath {
   return $false
 }
 
+function Test-ReparsePoint {
+  param([Parameter(Mandatory = $true)] $Item)
+
+  return (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+}
+
+function Get-UnsupportedLinkPaths {
+  param([Parameter(Mandatory = $true)][string] $SkillPath)
+
+  $Unsupported = New-Object System.Collections.Generic.List[string]
+  $SourceAbs = Resolve-AbsolutePath -Path $SkillPath
+
+  $Items = Get-ChildItem -LiteralPath $SourceAbs -Force -Recurse -ErrorAction SilentlyContinue
+  foreach ($Item in $Items) {
+    if (-not (Test-ReparsePoint -Item $Item)) {
+      continue
+    }
+
+    $RelativePath = $Item.FullName.Substring($SourceAbs.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    if (Test-ExcludedRelativePath -RelativePath $RelativePath) {
+      continue
+    }
+
+    $Unsupported.Add($RelativePath)
+  }
+
+  return $Unsupported
+}
+
 function Get-RiskNotes {
   param([Parameter(Mandatory = $true)][string] $SkillPath)
 
@@ -232,6 +261,10 @@ function Copy-SkillDirectory {
       continue
     }
 
+    if (Test-ReparsePoint -Item $Item) {
+      throw "Unsupported symlink or reparse point in skill: $RelativePath"
+    }
+
     $Destination = Join-Path $To $RelativePath
     if ($Item.PSIsContainer) {
       New-Item -ItemType Directory -Force -Path $Destination | Out-Null
@@ -310,6 +343,15 @@ if (-not (Test-Path -LiteralPath $SourceSkillPath -PathType Container)) {
 $SourceSkillPath = Resolve-AbsolutePath -Path $SourceSkillPath
 if (-not (Test-Path -LiteralPath (Join-Path $SourceSkillPath "SKILL.md") -PathType Leaf)) {
   Write-Host "missing-skill-md: $Skill"
+  exit 1
+}
+
+$UnsupportedLinks = @(Get-UnsupportedLinkPaths -SkillPath $SourceSkillPath)
+if ($UnsupportedLinks.Count -gt 0) {
+  Write-Host "unsupported-symlink: $Skill"
+  foreach ($UnsupportedLink in $UnsupportedLinks) {
+    Write-Host "unsupported-symlink-path: $UnsupportedLink"
+  }
   exit 1
 }
 

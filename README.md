@@ -144,7 +144,9 @@ Publishing safety defaults:
 stage requires an explicit single skill name
 stage does not overwrite an existing repository skill unless replace-existing is requested
 stage blocks risky content unless allow-risk is requested
-community skills require real upstream and license records before staging
+stage rejects symlinks and reparse points instead of dereferencing them
+community skills require non-empty upstream, patch, and license records before publishing
+publish only pushes allowed skill changes and entry submodule pointer changes
 publish never force-pushes
 ```
 

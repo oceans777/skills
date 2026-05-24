@@ -61,10 +61,25 @@ test_skill_directory() {
       add_failure "Missing SKILL.md in $repository_name: $skill_name"
     fi
 
+    if [ -L "$skill_path" ]; then
+      add_failure "Unsupported symlink in $repository_name: $skill_name"
+    fi
+
+    symlinks=$(find "$skill_path" -type l -print)
+    if [ -n "$symlinks" ]; then
+      old_ifs=$IFS
+      IFS='
+'
+      for symlink_path in $symlinks; do
+        add_failure "Unsupported symlink in $repository_name: $skill_name: ${symlink_path#"$skill_path"/}"
+      done
+      IFS=$old_ifs
+    fi
+
     if [ "$require_upstream" = "true" ]; then
       for required in UPSTREAM.md PATCHES.md LICENSE; do
-        if [ ! -f "$skill_path/$required" ]; then
-          add_failure "Missing $required in $repository_name: $skill_name"
+        if [ ! -f "$skill_path/$required" ] || [ -z "$(tr -d '[:space:]' < "$skill_path/$required" 2>/dev/null)" ]; then
+          add_failure "Missing or empty $required in $repository_name: $skill_name"
         fi
       done
     fi

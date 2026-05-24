@@ -164,6 +164,32 @@ assert_repo_clean_outside_paths() {
   IFS=$old_ifs
 }
 
+assert_ahead_changes_inside_paths() {
+  repo=$1
+  name=$2
+  shift 2
+
+  if ! repo_head_differs_from_origin_main "$repo"; then
+    return 0
+  fi
+
+  diff_paths=$(git -C "$repo" -c core.quotePath=false diff --name-only origin/main..HEAD -- .)
+  [ -n "$diff_paths" ] || return 0
+
+  old_ifs=$IFS
+  IFS='
+'
+  for path in $diff_paths; do
+    if ! is_allowed_path "$path" "$@"; then
+      IFS=$old_ifs
+      echo "publish-ahead-outside-allowed-paths: $name"
+      echo "ahead_path: $path"
+      exit 1
+    fi
+  done
+  IFS=$old_ifs
+}
+
 repo_has_changes_under_path() {
   repo=$1
   path=$2
@@ -280,6 +306,9 @@ done
 assert_repo_clean_outside_paths "$REPO_ROOT" entry "$FIRST_PARTY_REL" "$COMMUNITY_REL"
 assert_repo_clean_outside_paths "$FIRST_PARTY_REPO" oceans-skills skills
 assert_repo_clean_outside_paths "$COMMUNITY_REPO" community-skills skills
+assert_ahead_changes_inside_paths "$REPO_ROOT" entry "$FIRST_PARTY_REL" "$COMMUNITY_REL"
+assert_ahead_changes_inside_paths "$FIRST_PARTY_REPO" oceans-skills skills
+assert_ahead_changes_inside_paths "$COMMUNITY_REPO" community-skills skills
 
 sh "$SCRIPT_DIR/validate-skills.sh" \
   --first-party-root "$FIRST_PARTY_REPO/skills" \

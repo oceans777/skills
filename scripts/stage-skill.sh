@@ -218,6 +218,19 @@ is_excluded_path() {
   return 1
 }
 
+SYMLINK_LIST=$(find "$SOURCE_SKILL" -type l -print)
+if [ -n "$SYMLINK_LIST" ]; then
+  echo "unsupported-symlink: $SKILL"
+  printf '%s\n' "$SYMLINK_LIST" | while IFS= read -r link_path; do
+    rel=${link_path#"$SOURCE_SKILL"/}
+    if is_excluded_path "$rel"; then
+      continue
+    fi
+    echo "unsupported-symlink-path: $rel"
+  done
+  exit 1
+fi
+
 RISK_NOTES_FILE=${TMPDIR:-/tmp}/stage-skill-risks.$$
 : > "$RISK_NOTES_FILE"
 
@@ -374,7 +387,10 @@ mkdir -p "$TARGET_PATH"
     continue
   fi
 
-  if [ -d "$SOURCE_SKILL/$rel" ]; then
+  if [ -L "$SOURCE_SKILL/$rel" ]; then
+    echo "Unsupported symlink in skill: $rel" >&2
+    exit 1
+  elif [ -d "$SOURCE_SKILL/$rel" ]; then
     mkdir -p "$TARGET_PATH/$rel"
   elif [ -f "$SOURCE_SKILL/$rel" ]; then
     mkdir -p "$TARGET_PATH/$(dirname "$rel")"

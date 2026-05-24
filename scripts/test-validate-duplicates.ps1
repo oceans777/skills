@@ -37,6 +37,30 @@ function Remove-TestRoot {
   Remove-Item -LiteralPath $ResolvedRoot -Recurse -Force
 }
 
+function Invoke-ValidateSkills {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $FirstPartyRoot,
+
+    [Parameter(Mandatory = $true)]
+    [string] $CommunityRoot
+  )
+
+  $PreviousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $Output = & powershell -NoProfile -ExecutionPolicy Bypass -File "$RepoRoot\scripts\validate-skills.ps1" -FirstPartySkillsRoot $FirstPartyRoot -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
+    $ExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $PreviousErrorActionPreference
+  }
+
+  [PSCustomObject]@{
+    ExitCode = $ExitCode
+    Output = $Output
+  }
+}
+
 try {
   $FirstPartyRoot = Join-Path $TestRoot "oceans-skills"
   $CommunityRoot = Join-Path $TestRoot "community-skills"
@@ -50,21 +74,28 @@ try {
   Set-Content -LiteralPath (Join-Path $CommunityRoot "duplicate-skill\PATCHES.md") -Value "patches" -Encoding UTF8
   Set-Content -LiteralPath (Join-Path $CommunityRoot "duplicate-skill\LICENSE") -Value "license" -Encoding UTF8
 
-  $Succeeded = $true
-  $Output = ""
-  try {
-    $Output = & "$RepoRoot\scripts\validate-skills.ps1" -FirstPartySkillsRoot $FirstPartyRoot -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
-  } catch {
-    $Succeeded = $false
-    $Output = ($_ | Out-String) + "`n" + ($Output | Out-String)
-  }
-
-  if ($Succeeded) {
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  if ($Result.ExitCode -eq 0) {
     throw "Expected duplicate validation to fail."
   }
 
-  Assert-Contains -Text $Output -Expected "Duplicate skill name across reposit"
-  Assert-Contains -Text $Output -Expected "ories: duplicate-skill"
+  Assert-Contains -Text $Result.Output -Expected "Duplicate skill name across repositories: duplicate-skill"
+
+  $EmptyCommunitySkill = Join-Path $CommunityRoot "empty-attribution-skill"
+  New-Item -ItemType Directory -Force -Path $EmptyCommunitySkill | Out-Null
+  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "SKILL.md") -Value "---`nname: empty-attribution-skill`ndescription: Empty attribution.`n---`n" -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "UPSTREAM.md") -Value "" -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "PATCHES.md") -Value "   " -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "LICENSE") -Value "" -Encoding UTF8
+
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  if ($Result.ExitCode -eq 0) {
+    throw "Expected empty community attribution validation to fail."
+  }
+
+  Assert-Contains -Text $Result.Output -Expected "Missing or empty UPSTREAM.md in community-skills: empty-attribution-skill"
+  Assert-Contains -Text $Result.Output -Expected "Missing or empty PATCHES.md in community-skills: empty-attribution-skill"
+  Assert-Contains -Text $Result.Output -Expected "Missing or empty LICENSE in community-skills: empty-attribution-skill"
   Write-Host "PowerShell validate duplicate test passed."
 } finally {
   Remove-TestRoot

@@ -165,6 +165,35 @@ function Assert-RepoCleanOutsidePaths {
   }
 }
 
+function Assert-AheadChangesInsidePaths {
+  param(
+    [Parameter(Mandatory = $true)][string] $Repo,
+    [Parameter(Mandatory = $true)][string] $Name,
+    [Parameter(Mandatory = $true)][string[]] $AllowedRoots
+  )
+
+  if (-not (Test-RepoHeadDiffersFromOriginMain -Repo $Repo)) {
+    return
+  }
+
+  $DiffPaths = & git -C $Repo -c core.quotePath=false diff --name-only origin/main..HEAD -- .
+  if ($LASTEXITCODE -ne 0) {
+    throw "git diff origin/main..HEAD failed for $Name."
+  }
+
+  foreach ($DiffPath in $DiffPaths) {
+    if (-not $DiffPath) {
+      continue
+    }
+
+    if (-not (Test-AllowedPath -Path $DiffPath -AllowedRoots $AllowedRoots)) {
+      Write-Host "publish-ahead-outside-allowed-paths: $Name"
+      Write-Host "ahead_path: $DiffPath"
+      exit 1
+    }
+  }
+}
+
 function Test-RepoHasChangesUnderPath {
   param(
     [Parameter(Mandatory = $true)][string] $Repo,
@@ -273,6 +302,9 @@ foreach ($Repository in $Repositories) {
 Assert-RepoCleanOutsidePaths -Repo $RepoRoot -Name "entry" -AllowedRoots @($FirstPartyRel, $CommunityRel)
 Assert-RepoCleanOutsidePaths -Repo $FirstPartyRepo -Name "oceans-skills" -AllowedRoots @("skills")
 Assert-RepoCleanOutsidePaths -Repo $CommunityRepo -Name "community-skills" -AllowedRoots @("skills")
+Assert-AheadChangesInsidePaths -Repo $RepoRoot -Name "entry" -AllowedRoots @($FirstPartyRel, $CommunityRel)
+Assert-AheadChangesInsidePaths -Repo $FirstPartyRepo -Name "oceans-skills" -AllowedRoots @("skills")
+Assert-AheadChangesInsidePaths -Repo $CommunityRepo -Name "community-skills" -AllowedRoots @("skills")
 
 $ValidateScript = Join-Path $ScriptRoot "validate-skills.ps1"
 try {

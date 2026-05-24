@@ -242,6 +242,19 @@ try {
   Assert-Contains -Text $Output -Expected "risk-blocked: binary-skill"
   Assert-Contains -Text $Output -Expected "risk: binary or unreadable file"
 
+  $Fixture = New-Fixture -Name "reparse-point-rejected"
+  New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "reparse-skill") | Out-Null
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "reparse-skill\SKILL.md") -Value "---`nname: reparse-skill`ndescription: Reparse point skill.`n---`n" -Encoding UTF8
+  $ExternalDirectory = Join-Path $Fixture.Root "external-directory"
+  New-Item -ItemType Directory -Force -Path $ExternalDirectory | Out-Null
+  Set-Content -LiteralPath (Join-Path $ExternalDirectory "secret.txt") -Value "api_key: external-secret" -Encoding UTF8
+  $JunctionPath = Join-Path $Fixture.SourceRoot "reparse-skill\external-link"
+  New-Item -ItemType Junction -Path $JunctionPath -Target $ExternalDirectory | Out-Null
+  $Args = (Get-BaseArgs -Fixture $Fixture -Skill "reparse-skill" -Target "oceans") + @("-AllowRisk")
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
+  Assert-Contains -Text $Output -Expected "unsupported-symlink: reparse-skill"
+  Assert-PathMissing -Path (Join-Path $Fixture.FirstPartyRoot "reparse-skill\external-link\secret.txt")
+
   $Fixture = New-Fixture -Name "community-missing-attribution"
   $Args = Get-BaseArgs -Fixture $Fixture -Skill "community-skill" -Target "community"
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure

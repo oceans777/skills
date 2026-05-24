@@ -336,6 +336,18 @@ run_publish_failure >/dev/null
 assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Validate failure should not commit entry."
 assert_equal "$(get_head "$COMMUNITY_REPO")" "$CHILD_HEAD" "Validate failure should not commit child."
 
+new_fixture empty-community-attribution-failure
+add_community_skill_change empty-community-skill invalid
+EMPTY_SKILL_PATH=$COMMUNITY_REPO/skills/empty-community-skill
+: > "$EMPTY_SKILL_PATH/UPSTREAM.md"
+printf '%s\n' "   " > "$EMPTY_SKILL_PATH/PATCHES.md"
+: > "$EMPTY_SKILL_PATH/LICENSE"
+ENTRY_HEAD=$(get_head "$ENTRY_REPO")
+CHILD_HEAD=$(get_head "$COMMUNITY_REPO")
+run_publish_failure >/dev/null
+assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Empty community attribution should not commit entry."
+assert_equal "$(get_head "$COMMUNITY_REPO")" "$CHILD_HEAD" "Empty community attribution should not commit child."
+
 new_fixture entry-dirty-outside-child-repos
 add_first_party_skill_change dirty-blocked-skill unstage
 printf '%s\n' "dirty entry file" > "$ENTRY_REPO/ENTRY-DIRTY.txt"
@@ -344,6 +356,28 @@ CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
 run_publish_failure >/dev/null
 assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Dirty entry repo should not commit entry."
 assert_equal "$(get_head "$FIRST_PARTY_REPO")" "$CHILD_HEAD" "Dirty entry repo should not commit child."
+
+new_fixture ahead-child-outside-skills
+printf '%s\n' "unrelated child commit" > "$FIRST_PARTY_REPO/README.md"
+git_quiet "$FIRST_PARTY_REPO" add README.md
+git_quiet "$FIRST_PARTY_REPO" commit -m "docs: unrelated child change"
+ENTRY_HEAD=$(get_head "$ENTRY_REPO")
+CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
+CHILD_REMOTE_HEAD=$(get_remote_main "$FIRST_PARTY_REPO")
+run_publish_failure >/dev/null
+assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Ahead child outside skills should not commit entry."
+assert_equal "$(get_head "$FIRST_PARTY_REPO")" "$CHILD_HEAD" "Ahead child outside skills should keep local child commit."
+assert_equal "$(get_remote_main "$FIRST_PARTY_REPO")" "$CHILD_REMOTE_HEAD" "Ahead child outside skills should not push child commit."
+
+new_fixture ahead-entry-outside-submodules
+printf '%s\n' "unrelated entry commit" > "$ENTRY_REPO/ENTRY-AHEAD.txt"
+git_quiet "$ENTRY_REPO" add ENTRY-AHEAD.txt
+git_quiet "$ENTRY_REPO" commit -m "docs: unrelated entry change"
+ENTRY_HEAD=$(get_head "$ENTRY_REPO")
+ENTRY_REMOTE_HEAD=$(get_remote_main "$ENTRY_REPO")
+run_publish_failure >/dev/null
+assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Ahead entry outside submodules should keep local entry commit."
+assert_equal "$(get_remote_main "$ENTRY_REPO")" "$ENTRY_REMOTE_HEAD" "Ahead entry outside submodules should not push entry commit."
 
 new_fixture only-child-staged-skill-changes
 add_first_party_skill_change staged-ocean-skill stage

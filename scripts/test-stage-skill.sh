@@ -246,6 +246,24 @@ OUTPUT=$(run_stage_failure_common spaced-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: spaced-skill"
 assert_contains "$OUTPUT" "risk: secret-like text"
 
+new_fixture symlink-rejected
+mkdir -p "$SOURCE_ROOT/symlink-skill"
+cat > "$SOURCE_ROOT/symlink-skill/SKILL.md" <<'EOF'
+---
+name: symlink-skill
+description: Symlink skill.
+---
+EOF
+printf '%s\n' "api_key: external-secret" > "$FIXTURE_ROOT/external-secret.txt"
+if ln -s "$FIXTURE_ROOT/external-secret.txt" "$SOURCE_ROOT/symlink-skill/secret-link.txt" 2>/dev/null &&
+   [ -L "$SOURCE_ROOT/symlink-skill/secret-link.txt" ]; then
+  OUTPUT=$(run_stage_failure_common symlink-skill oceans --allow-risk)
+  assert_contains "$OUTPUT" "unsupported-symlink: symlink-skill"
+  assert_path_missing "$FIRST_PARTY_ROOT/symlink-skill/secret-link.txt"
+else
+  echo "Skipping symlink stage test: symbolic links are not available in this environment."
+fi
+
 new_fixture community-missing-attribution
 OUTPUT=$(run_stage_failure_common community-skill community)
 assert_contains "$OUTPUT" "missing-community-attribution: community-skill"

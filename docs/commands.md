@@ -150,7 +150,9 @@ Safety defaults:
 explicit single skill only
 no default overwrite
 no default risky content
-community requires real upstream/license records
+no symlinks or reparse points in publishable skills
+community requires non-empty upstream, patch, and license records
+publish only pushes allowed skill changes and entry submodule pointer changes
 publish never force-pushes
 ```
 

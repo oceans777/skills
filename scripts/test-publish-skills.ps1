@@ -451,6 +451,18 @@ try {
   Assert-Equal -Actual (Get-Head -RepoPath $Fixture.EntryRepo) -Expected $EntryHead -Message "Validate failure should not commit entry."
   Assert-Equal -Actual (Get-Head -RepoPath $Fixture.CommunityRepo) -Expected $ChildHead -Message "Validate failure should not commit child."
 
+  $Fixture = New-Fixture -Name "empty-community-attribution-failure"
+  Add-CommunitySkillChange -Fixture $Fixture -SkillName "empty-community-skill" -Invalid
+  $EmptySkillPath = Join-Path $Fixture.CommunityRepo "skills\empty-community-skill"
+  Set-Content -LiteralPath (Join-Path $EmptySkillPath "UPSTREAM.md") -Value "" -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $EmptySkillPath "PATCHES.md") -Value "   " -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $EmptySkillPath "LICENSE") -Value "" -Encoding UTF8
+  $EntryHead = Get-Head -RepoPath $Fixture.EntryRepo
+  $ChildHead = Get-Head -RepoPath $Fixture.CommunityRepo
+  Invoke-Publish -Fixture $Fixture -ExpectFailure | Out-Null
+  Assert-Equal -Actual (Get-Head -RepoPath $Fixture.EntryRepo) -Expected $EntryHead -Message "Empty community attribution should not commit entry."
+  Assert-Equal -Actual (Get-Head -RepoPath $Fixture.CommunityRepo) -Expected $ChildHead -Message "Empty community attribution should not commit child."
+
   $Fixture = New-Fixture -Name "entry-dirty-outside-child-repos"
   Add-FirstPartySkillChange -Fixture $Fixture
   Set-Content -LiteralPath (Join-Path $Fixture.EntryRepo "ENTRY-DIRTY.txt") -Value "dirty entry file" -Encoding UTF8
@@ -459,6 +471,28 @@ try {
   Invoke-Publish -Fixture $Fixture -ExpectFailure | Out-Null
   Assert-Equal -Actual (Get-Head -RepoPath $Fixture.EntryRepo) -Expected $EntryHead -Message "Dirty entry repo should not commit entry."
   Assert-Equal -Actual (Get-Head -RepoPath $Fixture.FirstPartyRepo) -Expected $ChildHead -Message "Dirty entry repo should not commit child."
+
+  $Fixture = New-Fixture -Name "ahead-child-outside-skills"
+  Set-Content -LiteralPath (Join-Path $Fixture.FirstPartyRepo "README.md") -Value "unrelated child commit" -Encoding UTF8
+  Invoke-Git -RepoPath $Fixture.FirstPartyRepo -Arguments @("add", "README.md") | Out-Null
+  Invoke-Git -RepoPath $Fixture.FirstPartyRepo -Arguments @("commit", "-m", "docs: unrelated child change") | Out-Null
+  $EntryHead = Get-Head -RepoPath $Fixture.EntryRepo
+  $ChildHead = Get-Head -RepoPath $Fixture.FirstPartyRepo
+  $ChildRemoteHead = Get-RemoteMain -RepoPath $Fixture.FirstPartyRepo
+  Invoke-Publish -Fixture $Fixture -ExpectFailure | Out-Null
+  Assert-Equal -Actual (Get-Head -RepoPath $Fixture.EntryRepo) -Expected $EntryHead -Message "Ahead child outside skills should not commit entry."
+  Assert-Equal -Actual (Get-Head -RepoPath $Fixture.FirstPartyRepo) -Expected $ChildHead -Message "Ahead child outside skills should keep local child commit."
+  Assert-Equal -Actual (Get-RemoteMain -RepoPath $Fixture.FirstPartyRepo) -Expected $ChildRemoteHead -Message "Ahead child outside skills should not push child commit."
+
+  $Fixture = New-Fixture -Name "ahead-entry-outside-submodules"
+  Set-Content -LiteralPath (Join-Path $Fixture.EntryRepo "ENTRY-AHEAD.txt") -Value "unrelated entry commit" -Encoding UTF8
+  Invoke-Git -RepoPath $Fixture.EntryRepo -Arguments @("add", "ENTRY-AHEAD.txt") | Out-Null
+  Invoke-Git -RepoPath $Fixture.EntryRepo -Arguments @("commit", "-m", "docs: unrelated entry change") | Out-Null
+  $EntryHead = Get-Head -RepoPath $Fixture.EntryRepo
+  $EntryRemoteHead = Get-RemoteMain -RepoPath $Fixture.EntryRepo
+  Invoke-Publish -Fixture $Fixture -ExpectFailure | Out-Null
+  Assert-Equal -Actual (Get-Head -RepoPath $Fixture.EntryRepo) -Expected $EntryHead -Message "Ahead entry outside submodules should keep local entry commit."
+  Assert-Equal -Actual (Get-RemoteMain -RepoPath $Fixture.EntryRepo) -Expected $EntryRemoteHead -Message "Ahead entry outside submodules should not push entry commit."
 
   $Fixture = New-Fixture -Name "only-child-staged-skill-changes"
   Add-FirstPartySkillChange -Fixture $Fixture -SkillName "staged-ocean-skill" -Stage
