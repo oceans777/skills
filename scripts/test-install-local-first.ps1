@@ -35,6 +35,14 @@ function Assert-FileContains {
   }
 }
 
+function Assert-PathExists {
+  param([Parameter(Mandatory = $true)][string] $Path)
+
+  if (-not (Test-Path -LiteralPath $Path)) {
+    throw "Expected path to exist: $Path"
+  }
+}
+
 function Remove-TestRoot {
   if (-not (Test-Path -LiteralPath $TestRoot)) {
     return
@@ -101,6 +109,53 @@ try {
   Assert-FileContains -Path (Join-Path $ManagedTarget "SKILL.md") -Expected "repo-version"
   Assert-FileContains -Path (Join-Path $UnknownTarget "SKILL.md") -Expected "unknown-marker-version"
   Assert-FileContains -Path (Join-Path $SourceMismatchTarget "SKILL.md") -Expected "community-managed-version"
+  Assert-FileContains -Path (Join-Path $ManagedTarget ".oceans-skill-source") -Expected "install_root=$InstallRoot"
+
+  $ClaudeHome = Join-Path $TestRoot "claude-home"
+  $OldClaudeHome = $env:CLAUDE_HOME
+  try {
+    $env:CLAUDE_HOME = $ClaudeHome
+    $Output = & "$RepoRoot\scripts\install-skills.ps1" `
+      -Runtime "claude" `
+      -FirstPartySkillsRoot $FirstPartyRoot `
+      -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
+  } finally {
+    if ($null -eq $OldClaudeHome) { Remove-Item Env:\CLAUDE_HOME -ErrorAction SilentlyContinue } else { $env:CLAUDE_HOME = $OldClaudeHome }
+  }
+  $ClaudeInstallRoot = Join-Path $ClaudeHome "skills"
+  Assert-Contains -Text $Output -Expected "Install root: $ClaudeInstallRoot"
+  Assert-PathExists -Path (Join-Path $ClaudeInstallRoot "managed-update-test\SKILL.md")
+  Assert-FileContains -Path (Join-Path $ClaudeInstallRoot "managed-update-test\.oceans-skill-source") -Expected "runtime=claude"
+  Assert-FileContains -Path (Join-Path $ClaudeInstallRoot "managed-update-test\.oceans-skill-source") -Expected "install_root=$ClaudeInstallRoot"
+
+  $CodexHome = Join-Path $TestRoot "codex-home"
+  $AgentsHome = Join-Path $TestRoot "agents-home"
+  $ClaudeHome = Join-Path $TestRoot "claude-existing-home"
+  foreach ($Root in @($CodexHome, $AgentsHome, $ClaudeHome)) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Root "skills") | Out-Null
+  }
+  $OldCodexHome = $env:CODEX_HOME
+  $OldAgentsHome = $env:AGENTS_HOME
+  $OldClaudeHome = $env:CLAUDE_HOME
+  try {
+    $env:CODEX_HOME = $CodexHome
+    $env:AGENTS_HOME = $AgentsHome
+    $env:CLAUDE_HOME = $ClaudeHome
+    $Output = & "$RepoRoot\scripts\install-skills.ps1" `
+      -AllExistingRuntimes `
+      -FirstPartySkillsRoot $FirstPartyRoot `
+      -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
+  } finally {
+    if ($null -eq $OldCodexHome) { Remove-Item Env:\CODEX_HOME -ErrorAction SilentlyContinue } else { $env:CODEX_HOME = $OldCodexHome }
+    if ($null -eq $OldAgentsHome) { Remove-Item Env:\AGENTS_HOME -ErrorAction SilentlyContinue } else { $env:AGENTS_HOME = $OldAgentsHome }
+    if ($null -eq $OldClaudeHome) { Remove-Item Env:\CLAUDE_HOME -ErrorAction SilentlyContinue } else { $env:CLAUDE_HOME = $OldClaudeHome }
+  }
+  Assert-Contains -Text $Output -Expected "codex-home"
+  Assert-Contains -Text $Output -Expected "agents-home"
+  Assert-Contains -Text $Output -Expected "claude-existing-home"
+  Assert-PathExists -Path (Join-Path $CodexHome "skills\managed-update-test\SKILL.md")
+  Assert-PathExists -Path (Join-Path $AgentsHome "skills\managed-update-test\SKILL.md")
+  Assert-PathExists -Path (Join-Path $ClaudeHome "skills\managed-update-test\SKILL.md")
 
   Write-Host "PowerShell install local-first test passed."
 } finally {

@@ -9,6 +9,7 @@ param(
   [ValidateSet("oceans", "community")] [string] $Target,
   [switch] $AllowRisk,
   [switch] $ReplaceExisting,
+  [switch] $AllExistingRuntimes,
   [switch] $DryRun,
   [string] $UpstreamUrl,
   [string] $UpstreamAuthor,
@@ -25,7 +26,10 @@ switch ($Command) {
     & "$RepoRoot\scripts\sync.ps1"
   }
   "install" {
-    & "$RepoRoot\scripts\install-skills.ps1"
+    $InstallArgs = @{}
+    if ($Runtime) { $InstallArgs.Runtime = $Runtime }
+    if ($AllExistingRuntimes) { $InstallArgs.AllExistingRuntimes = $true }
+    & "$RepoRoot\scripts\install-skills.ps1" @InstallArgs
   }
   "validate" {
     & "$RepoRoot\scripts\validate-skills.ps1"
@@ -37,6 +41,9 @@ switch ($Command) {
     $ImportArgs = @{}
     if ($SourceRoot) {
       $ImportArgs.SourceRoot = $SourceRoot
+    }
+    if ($Runtime) {
+      $ImportArgs.Runtime = $Runtime
     }
     & "$RepoRoot\scripts\import-skills.ps1" @ImportArgs
   }

@@ -12,7 +12,7 @@ case "$COMMAND" in
     sh "$REPO_ROOT/scripts/sync.sh"
     ;;
   install)
-    sh "$REPO_ROOT/scripts/install-skills.sh"
+    sh "$REPO_ROOT/scripts/install-skills.sh" "$@"
     ;;
   validate)
     sh "$REPO_ROOT/scripts/validate-skills.sh"

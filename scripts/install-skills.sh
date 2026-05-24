@@ -3,13 +3,13 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
-INSTALL_ROOT=${CODEX_HOME:+$CODEX_HOME/skills}
+SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
+
+INSTALL_ROOT=
+RUNTIME=codex
+ALL_EXISTING_RUNTIMES=0
 FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_SKILLS_ROOT=$REPO_ROOT/repos/community-skills/skills
-
-if [ -z "${INSTALL_ROOT:-}" ]; then
-  INSTALL_ROOT=$HOME/.codex/skills
-fi
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -20,6 +20,18 @@ while [ "$#" -gt 0 ]; do
       fi
       INSTALL_ROOT=$2
       shift 2
+      ;;
+    --runtime)
+      if [ "$#" -lt 2 ]; then
+        echo "--runtime needs a value." >&2
+        exit 2
+      fi
+      RUNTIME=$2
+      shift 2
+      ;;
+    --all-existing-runtimes)
+      ALL_EXISTING_RUNTIMES=1
+      shift
       ;;
     --first-party-root)
       if [ "$#" -lt 2 ]; then
@@ -44,8 +56,76 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-mkdir -p "$INSTALL_ROOT"
-INSTALL_ROOT_REAL=$(CDPATH= cd "$INSTALL_ROOT" && pwd -P)
+INSTALL_TARGETS_FILE=${TMPDIR:-/tmp}/oceans-install-targets.$$
+: > "$INSTALL_TARGETS_FILE"
+
+cleanup_install_targets() {
+  rm -f "$INSTALL_TARGETS_FILE"
+}
+trap cleanup_install_targets EXIT INT TERM
+
+add_install_target() {
+  runtime=$1
+  install_root=$2
+  create=$3
+
+  if [ "$create" -eq 1 ]; then
+    mkdir -p "$install_root"
+  fi
+
+  if [ ! -d "$install_root" ]; then
+    echo "Install root does not exist: $install_root" >&2
+    exit 1
+  fi
+
+  install_root_real=$(absolute_path "$install_root")
+  printf '%s|%s\n' "$runtime" "$install_root_real" >> "$INSTALL_TARGETS_FILE"
+}
+
+add_first_existing_runtime_target() {
+  runtime=$1
+  create=$2
+
+  if [ "$runtime" = "custom" ]; then
+    echo "custom-runtime-requires-path" >&2
+    exit 1
+  fi
+
+  first=
+  candidates=$(runtime_candidates "$runtime")
+  while IFS= read -r candidate; do
+    [ -n "$candidate" ] || continue
+    candidate_real=$(absolute_path "$candidate")
+    if [ -z "$first" ]; then
+      first=$candidate_real
+    fi
+    if [ -d "$candidate_real" ]; then
+      add_install_target "$runtime" "$candidate_real" 0
+      return
+    fi
+  done <<EOF
+$candidates
+EOF
+
+  if [ "$create" -eq 1 ]; then
+    add_install_target "$runtime" "$first" 1
+  fi
+}
+
+if [ -n "$INSTALL_ROOT" ]; then
+  add_install_target custom "$INSTALL_ROOT" 1
+elif [ "$ALL_EXISTING_RUNTIMES" -eq 1 ]; then
+  for known_runtime in codex agents claude openclaw hermes; do
+    add_first_existing_runtime_target "$known_runtime" 0
+  done
+else
+  add_first_existing_runtime_target "$RUNTIME" 1
+fi
+
+if [ ! -s "$INSTALL_TARGETS_FILE" ]; then
+  echo "No existing runtime skill roots found for install." >&2
+  exit 1
+fi
 
 source_repository_from_marker() {
   marker=$1
@@ -60,6 +140,8 @@ is_known_oceans_source() {
 install_from_repository() {
   repository_name=$1
   source_path=$2
+  runtime=$3
+  install_root_real=$4
 
   if [ ! -d "$source_path" ]; then
     echo "Skipping missing source: $source_path"
@@ -77,9 +159,9 @@ install_from_repository() {
         ;;
     esac
 
-    target=$INSTALL_ROOT_REAL/$skill_name
+    target=$install_root_real/$skill_name
     case "$target" in
-      "$INSTALL_ROOT_REAL"/*)
+      "$install_root_real"/*)
         ;;
       *)
         echo "Refusing to install outside install root: $target" >&2
@@ -115,6 +197,8 @@ install_from_repository() {
     {
       echo "source_repository=$repository_name"
       echo "source_path=$skill_path"
+      echo "runtime=$runtime"
+      echo "install_root=$install_root_real"
     } > "$target/.oceans-skill-source"
     if [ "$is_update" -eq 1 ]; then
       echo "Updated managed oceans777 skill: $skill_name"
@@ -124,7 +208,9 @@ install_from_repository() {
   done
 }
 
-install_from_repository "oceans-skills" "$FIRST_PARTY_SKILLS_ROOT"
-install_from_repository "community-skills" "$COMMUNITY_SKILLS_ROOT"
-
-echo "Install root: $INSTALL_ROOT"
+while IFS='|' read -r target_runtime install_root_real; do
+  [ -n "$target_runtime" ] || continue
+  install_from_repository "oceans-skills" "$FIRST_PARTY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
+  install_from_repository "community-skills" "$COMMUNITY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
+  echo "Install root: $install_root_real"
+done < "$INSTALL_TARGETS_FILE"

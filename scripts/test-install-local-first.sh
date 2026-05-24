@@ -32,6 +32,15 @@ assert_file_contains() {
   fi
 }
 
+assert_path_exists() {
+  path=$1
+
+  if [ ! -e "$path" ]; then
+    echo "Expected path to exist: $path" >&2
+    exit 1
+  fi
+}
+
 cleanup() {
   rm -rf "$TEST_ROOT"
 }
@@ -81,5 +90,34 @@ assert_file_contains "$INSTALL_ROOT/local-first-test/SKILL.md" "local-version"
 assert_file_contains "$INSTALL_ROOT/managed-update-test/SKILL.md" "repo-version"
 assert_file_contains "$INSTALL_ROOT/unknown-marker-test/SKILL.md" "unknown-marker-version"
 assert_file_contains "$INSTALL_ROOT/source-mismatch-test/SKILL.md" "community-managed-version"
+assert_file_contains "$INSTALL_ROOT/managed-update-test/.oceans-skill-source" "install_root=$INSTALL_ROOT"
+
+CLAUDE_HOME=$TEST_ROOT/claude-home
+export CLAUDE_HOME
+OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" \
+  --runtime claude \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT")
+CLAUDE_INSTALL_ROOT=$CLAUDE_HOME/skills
+assert_contains "$OUTPUT" "Install root: $CLAUDE_INSTALL_ROOT"
+assert_path_exists "$CLAUDE_INSTALL_ROOT/managed-update-test/SKILL.md"
+assert_file_contains "$CLAUDE_INSTALL_ROOT/managed-update-test/.oceans-skill-source" "runtime=claude"
+assert_file_contains "$CLAUDE_INSTALL_ROOT/managed-update-test/.oceans-skill-source" "install_root=$CLAUDE_INSTALL_ROOT"
+
+CODEX_HOME=$TEST_ROOT/codex-home
+AGENTS_HOME=$TEST_ROOT/agents-home
+CLAUDE_HOME=$TEST_ROOT/claude-existing-home
+export CODEX_HOME AGENTS_HOME CLAUDE_HOME
+mkdir -p "$CODEX_HOME/skills" "$AGENTS_HOME/skills" "$CLAUDE_HOME/skills"
+OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" \
+  --all-existing-runtimes \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT")
+assert_contains "$OUTPUT" "Install root: $CODEX_HOME/skills"
+assert_contains "$OUTPUT" "Install root: $AGENTS_HOME/skills"
+assert_contains "$OUTPUT" "Install root: $CLAUDE_HOME/skills"
+assert_path_exists "$CODEX_HOME/skills/managed-update-test/SKILL.md"
+assert_path_exists "$AGENTS_HOME/skills/managed-update-test/SKILL.md"
+assert_path_exists "$CLAUDE_HOME/skills/managed-update-test/SKILL.md"
 
 echo "Shell install local-first test passed."
