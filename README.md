@@ -338,6 +338,145 @@ Private or source unclear   -> do not publish yet
 
 The report also flags missing metadata, missing referenced license files, secret-like text, local absolute paths, large files, and binary or unreadable files so you can review them before publishing. Use JSON output when another script or UI needs to consume the report programmatically.
 
+## Contribute Or Upload A Skill
+
+Uploading is intentionally split into three steps:
+
+```text
+import  -> scan local skills and produce a report; no files are changed
+stage   -> copy one reviewed local skill into oceans-skills or community-skills
+publish -> validate, commit, update submodule pins, and push to GitHub
+```
+
+Choose the target repository before staging:
+
+```text
+You created and maintain the skill       -> oceans-skills
+You forked or adapted another author     -> community-skills
+The skill is private or source is unclear -> do not upload yet
+```
+
+### Maintainers With Write Access
+
+Start with a scan:
+
+Windows:
+
+```powershell
+.\oceans.ps1 import
+.\oceans.ps1 import -Format json
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import
+./oceans import --format json
+```
+
+Only stage skills that are clean enough to publish. A typical first-party upload looks like this:
+
+Windows:
+
+```powershell
+.\oceans.ps1 stage -Runtime codex -Skill my-skill -Target oceans
+.\oceans.ps1 validate
+.\oceans.ps1 publish
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans stage --runtime codex --skill my-skill --target oceans
+./oceans validate
+./oceans publish
+```
+
+If the skill is stored in a custom local directory, pass the source root explicitly:
+
+Windows:
+
+```powershell
+.\oceans.ps1 stage -SourceRoot "C:\path\to\skills" -Skill my-skill -Target oceans
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans stage --source-root "$HOME/path/to/skills" --skill my-skill --target oceans
+```
+
+For a community skill, include upstream and license records while staging:
+
+Windows:
+
+```powershell
+.\oceans.ps1 stage -Runtime codex -Skill third-party-skill -Target community `
+  -UpstreamUrl "https://github.com/author/repo" `
+  -UpstreamAuthor "Author Name" `
+  -UpstreamLicense "MIT" `
+  -LicenseFile "C:\path\to\LICENSE" `
+  -PatchSummary "Adapted metadata and packaging for oceans777."
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans stage --runtime codex --skill third-party-skill --target community \
+  --upstream-url "https://github.com/author/repo" \
+  --upstream-author "Author Name" \
+  --upstream-license "MIT" \
+  --license-file "$HOME/path/to/LICENSE" \
+  --patch-summary "Adapted metadata and packaging for oceans777."
+```
+
+Use `-AllowRisk` / `--allow-risk` only after reviewing every risk line. Use `-ReplaceExisting` / `--replace-existing` only when intentionally replacing an existing repository skill.
+
+### Contributors Without Write Access
+
+External contributors cannot push directly to `oceans777/skills`, `oceans777/oceans-skills`, or `oceans777/community-skills`. Use this flow instead:
+
+```text
+1. Run import locally and fix any invalid-skill or risk findings.
+2. Fork the target child repository: oceans-skills for your own skill, or community-skills for a third-party skill.
+3. Add the skill under skills/<skill-name>/ in your fork.
+4. Run validate locally if you also cloned the entry repository.
+5. Open a pull request to the target child repository.
+6. After merge, oceans777 maintainers update the entry repository submodule pin.
+```
+
+For community contributions, include `UPSTREAM.md`, `PATCHES.md`, and `LICENSE` in the pull request.
+
+### Programmatic Preflight
+
+Use JSON output when another script or UI decides what can be uploaded:
+
+Windows:
+
+```powershell
+$report = .\oceans.ps1 import -Format json | ConvertFrom-Json
+$report.items |
+  Where-Object { $_.status -eq "review-source" } |
+  Select-Object name, runtime, source_path, risks
+```
+
+Ubuntu and macOS:
+
+```sh
+./oceans import --format json > import-report.json
+```
+
+A program should treat `review-source` as "needs human classification", not as automatic permission to upload. It should block or ask for repair on `invalid-skill-name`, `invalid-skill-metadata`, `missing-skill-md`, `duplicate-local-runtime`, and any non-empty risk list other than `risk: none detected`.
+
+The implementation lives in these scripts:
+
+```text
+scripts/import-skills.ps1 / scripts/import-skills.sh   -> scan and report
+scripts/stage-skill.ps1 / scripts/stage-skill.sh       -> copy one reviewed skill
+scripts/publish-skills.ps1 / scripts/publish-skills.sh -> commit, pin, and push
+scripts/skill-publish-rules.*                          -> shared metadata and risk rules
+```
+
 ## Add A First-Party Skill
 
 Create a new folder in:
