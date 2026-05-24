@@ -21,6 +21,20 @@ function Assert-Contains {
   }
 }
 
+function Assert-NotContains {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Text,
+
+    [Parameter(Mandatory = $true)]
+    [string] $Unexpected
+  )
+
+  if ($Text.Contains($Unexpected)) {
+    throw "Expected output not to contain: $Unexpected`nActual output:`n$Text"
+  }
+}
+
 function Remove-SandboxRoot {
   if (-not (Test-Path -LiteralPath $SandboxRoot)) {
     return
@@ -79,6 +93,19 @@ try {
   Assert-Contains -Text $Output -Expected "missing-skill-md"
   Assert-Contains -Text $Output -Expected ".system"
   Assert-Contains -Text $Output -Expected "skip-system"
+
+  $BenignRoot = Join-Path $SandboxRoot "benign-local-skills"
+  $BenignSkill = Join-Path $BenignRoot "benign-route-skill"
+  New-Item -ItemType Directory -Force -Path (Join-Path $BenignSkill "data\__pycache__") | Out-Null
+  Set-Content -LiteralPath (Join-Path $BenignSkill "SKILL.md") -Value "---`nname: benign-route-skill`ndescription: Benign route path.`n---`napp/api/users/route.ts`n/homework/project`n" -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $BenignSkill "data\__pycache__\cache.pyc") -Value "C:\Users\example\cache-only" -Encoding UTF8
+  $BenignOutput = & "$RepoRoot\scripts\import-skills.ps1" `
+    -SourceRoot $BenignRoot `
+    -FirstPartySkillsRoot $FirstPartyRoot `
+    -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
+  Assert-Contains -Text $BenignOutput -Expected "benign-route-skill"
+  Assert-Contains -Text $BenignOutput -Expected "risk: none detected"
+  Assert-NotContains -Text $BenignOutput -Unexpected "risk: local absolute path"
 
   $CodexHome = Join-Path $SandboxRoot "codex-home"
   $AgentsHome = Join-Path $SandboxRoot "agents-home"

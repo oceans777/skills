@@ -19,6 +19,17 @@ assert_contains() {
   esac
 }
 
+assert_line() {
+  text=$1
+  expected=$2
+
+  if ! printf '%s\n' "$text" | grep -F -x -q "$expected"; then
+    echo "Expected output to contain line: $expected" >&2
+    echo "$text" >&2
+    exit 1
+  fi
+}
+
 assert_path_exists() {
   path=$1
 
@@ -233,12 +244,30 @@ mkdir -p "$SOURCE_ROOT/path-skill"
 cat > "$SOURCE_ROOT/path-skill/SKILL.md" <<'EOF'
 ---
 name: path-skill
-description: Uses /Users/example/private-notes.
+description: Uses C:\users\Name With Space\private-notes.
 ---
 EOF
 OUTPUT=$(run_stage_failure_common path-skill oceans)
 assert_contains "$OUTPUT" "risk-blocked: path-skill"
 assert_contains "$OUTPUT" "risk: local absolute path"
+assert_line "$OUTPUT" "risk_status: blocked"
+
+new_fixture benign-route-path
+mkdir -p "$SOURCE_ROOT/route-skill/data/__pycache__"
+cat > "$SOURCE_ROOT/route-skill/SKILL.md" <<'EOF'
+---
+name: route-skill
+description: Mentions app API users route.
+---
+app/api/users/route.ts
+/homework/project
+EOF
+printf '%s\n' 'C:\Users\example\cache-only' > "$SOURCE_ROOT/route-skill/data/__pycache__/cache.pyc"
+OUTPUT=$(run_stage_success_common route-skill oceans)
+assert_contains "$OUTPUT" "staged-skill: route-skill"
+assert_contains "$OUTPUT" "risk_status: none detected"
+assert_path_exists "$FIRST_PARTY_ROOT/route-skill/SKILL.md"
+assert_path_missing "$FIRST_PARTY_ROOT/route-skill/data/__pycache__/cache.pyc"
 
 new_fixture large-risk
 mkdir -p "$SOURCE_ROOT/large-skill"

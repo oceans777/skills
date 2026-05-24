@@ -16,6 +16,7 @@ $RepoRoot = Split-Path -Parent $ScriptRoot
 $RequestedSourceRoot = $SourceRoot
 $RequestedRuntime = $Runtime
 . (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
+. (Join-Path $ScriptRoot "skill-publish-rules.ps1")
 
 if (-not $FirstPartySkillsRoot) {
   $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
@@ -82,32 +83,9 @@ function Get-ManagedSource {
 function Get-RiskNotes {
   param([string] $SkillPath)
 
-  $Risks = New-Object System.Collections.Generic.List[string]
-  $Files = Get-ChildItem -LiteralPath $SkillPath -File -Recurse -Force -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' }
-
-  $SecretPattern = '(?i)(api[_-]?key\s*[:=]|secret\s*[:=]|token\s*[:=]|password\s*[:=]|authorization:\s*bearer|sk-[a-zA-Z0-9_-]{10,})'
-  $LocalPathPattern = '(?i)(/Users/|/home/|[A-Z]:\\Users\\|[A-Z]:/Users/|/private/)'
-
-  foreach ($File in $Files) {
-    $Content = $null
-    try {
-      $Content = Get-Content -LiteralPath $File.FullName -Raw -ErrorAction Stop
-    } catch {
-      continue
-    }
-
-    if ($Content -match $SecretPattern -and -not $Risks.Contains("risk: secret-like text")) {
-      $Risks.Add("risk: secret-like text")
-    }
-
-    if ($Content -match $LocalPathPattern -and -not $Risks.Contains("risk: local absolute path")) {
-      $Risks.Add("risk: local absolute path")
-    }
-  }
-
+  $Risks = @(Get-OceansSkillRiskNotes -SkillPath $SkillPath)
   if ($Risks.Count -eq 0) {
-    $Risks.Add("risk: none detected")
+    return @("risk: none detected")
   }
 
   return $Risks

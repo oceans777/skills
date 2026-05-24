@@ -261,11 +261,22 @@ try {
 
   $Fixture = New-Fixture -Name "path-risk"
   New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "path-skill") | Out-Null
-  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "path-skill\SKILL.md") -Value "---`nname: path-skill`ndescription: Uses C:\Users\example\private-notes.`n---`n" -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "path-skill\SKILL.md") -Value "---`nname: path-skill`ndescription: Uses C:\users\Name With Space\private-notes.`n---`n" -Encoding UTF8
   $Args = Get-BaseArgs -Fixture $Fixture -Skill "path-skill" -Target "oceans"
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
   Assert-Contains -Text $Output -Expected "risk-blocked: path-skill"
   Assert-Contains -Text $Output -Expected "risk: local absolute path"
+
+  $Fixture = New-Fixture -Name "benign-route-path"
+  New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "route-skill\data\__pycache__") | Out-Null
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "route-skill\SKILL.md") -Value "---`nname: route-skill`ndescription: Mentions app API users route.`n---`napp/api/users/route.ts`n/homework/project`n" -Encoding UTF8
+  Set-Content -LiteralPath (Join-Path $Fixture.SourceRoot "route-skill\data\__pycache__\cache.pyc") -Value "C:\Users\example\cache-only" -Encoding UTF8
+  $Args = Get-BaseArgs -Fixture $Fixture -Skill "route-skill" -Target "oceans"
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args
+  Assert-Contains -Text $Output -Expected "staged-skill: route-skill"
+  Assert-Contains -Text $Output -Expected "risk_status: none detected"
+  Assert-PathExists -Path (Join-Path $Fixture.FirstPartyRoot "route-skill\SKILL.md")
+  Assert-PathMissing -Path (Join-Path $Fixture.FirstPartyRoot "route-skill\data\__pycache__\cache.pyc")
 
   $Fixture = New-Fixture -Name "large-risk"
   New-Item -ItemType Directory -Force -Path (Join-Path $Fixture.SourceRoot "large-skill") | Out-Null

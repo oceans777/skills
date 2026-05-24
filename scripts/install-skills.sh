@@ -56,13 +56,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-INSTALL_TARGETS_FILE=${TMPDIR:-/tmp}/oceans-install-targets.$$
-: > "$INSTALL_TARGETS_FILE"
+INSTALL_TARGETS_FILE=$(mktemp "${TMPDIR:-/tmp}/oceans-install-targets.XXXXXX") || exit 1
 
 cleanup_install_targets() {
   rm -f "$INSTALL_TARGETS_FILE"
 }
-trap cleanup_install_targets EXIT INT TERM
+trap 'cleanup_install_targets' EXIT
+trap 'cleanup_install_targets; exit 129' HUP
+trap 'cleanup_install_targets; exit 130' INT
+trap 'cleanup_install_targets; exit 143' TERM
 
 add_install_target() {
   runtime=$1

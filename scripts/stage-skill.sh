@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
+. "$SCRIPT_DIR/skill-publish-rules.sh"
 
 SOURCE_ROOT=
 RUNTIME=codex
@@ -238,26 +239,10 @@ if [ ! -f "$SOURCE_SKILL/SKILL.md" ]; then
   exit 1
 fi
 
-is_excluded_path() {
-  rel=$1
-  old_ifs=$IFS
-  IFS='/'
-  for part in $rel; do
-    case "$part" in
-      .git|.oceans-skill-source|.DS_Store|Thumbs.db|.pytest_cache|__pycache__|node_modules)
-        IFS=$old_ifs
-        return 0
-        ;;
-    esac
-  done
-  IFS=$old_ifs
-  return 1
-}
-
 UNSUPPORTED_SYMLINK_LIST=$(
   find "$SOURCE_SKILL" -type l -print | while IFS= read -r link_path; do
     rel=${link_path#"$SOURCE_SKILL"/}
-    if is_excluded_path "$rel"; then
+    if oceans_is_excluded_relative_path "$rel"; then
       continue
     fi
     printf '%s\n' "$rel"
@@ -271,59 +256,11 @@ if [ -n "$UNSUPPORTED_SYMLINK_LIST" ]; then
   exit 1
 fi
 
-RISK_NOTES_FILE=${TMPDIR:-/tmp}/stage-skill-risks.$$
-: > "$RISK_NOTES_FILE"
-
-add_risk() {
-  risk=$1
-  if ! grep -F -x -q "$risk" "$RISK_NOTES_FILE" 2>/dev/null; then
-    printf '%s\n' "$risk" >> "$RISK_NOTES_FILE"
-  fi
-}
-
-find "$SOURCE_SKILL" -type f | while IFS= read -r file; do
-  rel=${file#"$SOURCE_SKILL"/}
-  if is_excluded_path "$rel"; then
-    continue
-  fi
-
-  size=$(wc -c < "$file" | tr -d ' ')
-  if [ "$size" -gt 1048576 ]; then
-    add_risk "risk: file larger than 1 MB"
-    continue
-  fi
-
-  if ! LC_ALL=C grep -Iq . "$file" 2>/dev/null && [ "$size" -gt 0 ]; then
-    add_risk "risk: binary or unreadable file"
-    continue
-  fi
-
-  if command -v perl >/dev/null 2>&1 &&
-     ! perl -MEncode=decode -0777 -ne 'eval { decode("UTF-8", $_, 1); 1 } or exit 1' "$file" 2>/dev/null; then
-    add_risk "risk: binary or unreadable file"
-    continue
-  fi
-
-  if command -v iconv >/dev/null 2>&1 &&
-     ! iconv -f UTF-8 -t UTF-8 "$file" >/dev/null 2>&1; then
-    add_risk "risk: binary or unreadable file"
-    continue
-  fi
-
-  if grep -E -i -q '(api[_-]?key[[:space:]]*[:=]|secret[[:space:]]*[:=]|token[[:space:]]*[:=]|password[[:space:]]*[:=]|authorization[[:space:]]*:?[[:space:]]*bearer|sk-[a-zA-Z0-9_-]{10,})' "$file" 2>/dev/null; then
-    add_risk "risk: secret-like text"
-  fi
-
-  if grep -E -i -q '(/Users/|/home/|[A-Z]:\\Users\\|[A-Z]:/Users/|/private/)' "$file" 2>/dev/null; then
-    add_risk "risk: local absolute path"
-  fi
-done
-RISKS=$(cat "$RISK_NOTES_FILE")
-rm -f "$RISK_NOTES_FILE"
+RISKS=$(oceans_scan_skill_risks "$SOURCE_SKILL")
 
 if [ -n "$RISKS" ] && [ "$ALLOW_RISK" -ne 1 ]; then
   echo "risk-blocked: $SKILL"
-  printf '%s' "$RISKS"
+  printf '%s\n' "$RISKS"
   echo "risk_status: blocked"
   exit 1
 fi
@@ -423,7 +360,7 @@ fi
 mkdir -p "$TARGET_PATH"
 (CDPATH= cd "$SOURCE_SKILL" && find . -mindepth 1 -print) | while IFS= read -r item; do
   rel=${item#./}
-  if is_excluded_path "$rel"; then
+  if oceans_is_excluded_relative_path "$rel"; then
     continue
   fi
 

@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
+. "$SCRIPT_DIR/skill-publish-rules.sh"
 
 SOURCE_ROOT=
 RUNTIME=
@@ -65,15 +66,19 @@ if [ "$FORMAT" != "text" ]; then
   exit 2
 fi
 
-ROOTS_FILE=${TMPDIR:-/tmp}/oceans-import-roots.$$
-RECORDS_FILE=${TMPDIR:-/tmp}/oceans-import-records.$$
-: > "$ROOTS_FILE"
-: > "$RECORDS_FILE"
+ROOTS_FILE=$(mktemp "${TMPDIR:-/tmp}/oceans-import-roots.XXXXXX") || exit 1
+RECORDS_FILE=$(mktemp "${TMPDIR:-/tmp}/oceans-import-records.XXXXXX") || {
+  rm -f "$ROOTS_FILE"
+  exit 1
+}
 
 cleanup_import_roots() {
   rm -f "$ROOTS_FILE" "$RECORDS_FILE"
 }
-trap cleanup_import_roots EXIT INT TERM
+trap 'cleanup_import_roots' EXIT
+trap 'cleanup_import_roots; exit 129' HUP
+trap 'cleanup_import_roots; exit 130' INT
+trap 'cleanup_import_roots; exit 143' TERM
 
 add_scan_root() {
   runtime=$1
@@ -155,21 +160,14 @@ managed_source() {
 
 print_risks() {
   skill_path=$1
-  printed=0
+  risks=$(oceans_scan_skill_risks "$skill_path")
 
-  if find "$skill_path" -type f ! -path '*/.git/*' -exec grep -E -i -q '(api[_-]?key[[:space:]]*[:=]|secret[[:space:]]*[:=]|token[[:space:]]*[:=]|password[[:space:]]*[:=]|authorization:[[:space:]]*bearer|sk-[a-zA-Z0-9_-]{10,})' {} + 2>/dev/null; then
-    echo "  risk: secret-like text"
-    printed=1
-  fi
-
-  if find "$skill_path" -type f ! -path '*/.git/*' -exec grep -E -i -q '(/Users/|/home/|[A-Z]:\\Users\\|[A-Z]:/Users/|/private/)' {} + 2>/dev/null; then
-    echo "  risk: local absolute path"
-    printed=1
-  fi
-
-  if [ "$printed" -eq 0 ]; then
+  if [ -z "$risks" ]; then
     echo "  risk: none detected"
+    return
   fi
+
+  printf '%s\n' "$risks" | sed 's/^/  /'
 }
 
 print_item() {

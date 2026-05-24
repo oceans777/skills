@@ -23,9 +23,9 @@ $RepoRoot = Split-Path -Parent $ScriptRoot
 $RequestedSourceRoot = $SourceRoot
 $RequestedRuntime = $Runtime
 . (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
+. (Join-Path $ScriptRoot "skill-publish-rules.ps1")
 $SourceRoot = $RequestedSourceRoot
 $Runtime = $RequestedRuntime
-$ExcludedNames = @(".git", ".oceans-skill-source", ".DS_Store", "Thumbs.db", ".pytest_cache", "__pycache__", "node_modules")
 
 function Resolve-DefaultSourceRoot {
   if ($SourceRoot) {
@@ -126,18 +126,6 @@ function Test-RepositoryDirtyOutsideSkills {
   }
 }
 
-function Test-ExcludedRelativePath {
-  param([Parameter(Mandatory = $true)][string] $RelativePath)
-
-  foreach ($Part in ($RelativePath -split '[\\/]')) {
-    if ($ExcludedNames -contains $Part) {
-      return $true
-    }
-  }
-
-  return $false
-}
-
 function Test-ReparsePoint {
   param([Parameter(Mandatory = $true)] $Item)
 
@@ -157,7 +145,7 @@ function Get-UnsupportedLinkPaths {
     }
 
     $RelativePath = $Item.FullName.Substring($SourceAbs.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    if (Test-ExcludedRelativePath -RelativePath $RelativePath) {
+    if (Test-OceansExcludedRelativePath -RelativePath $RelativePath) {
       continue
     }
 
@@ -165,56 +153,6 @@ function Get-UnsupportedLinkPaths {
   }
 
   return $Unsupported
-}
-
-function Get-RiskNotes {
-  param([Parameter(Mandatory = $true)][string] $SkillPath)
-
-  $Risks = New-Object System.Collections.Generic.List[string]
-  $SecretPattern = '(?i)(api[_-]?key\s*[:=]|secret\s*[:=]|token\s*[:=]|password\s*[:=]|authorization\s*:?\s*bearer|sk-[a-zA-Z0-9_-]{10,})'
-  $LocalPathPattern = '(?i)(/Users/|/home/|[A-Z]:\\Users\\|[A-Z]:/Users/|/private/)'
-  $SourceAbs = Resolve-AbsolutePath -Path $SkillPath
-
-  $Files = Get-ChildItem -LiteralPath $SourceAbs -File -Recurse -Force -ErrorAction SilentlyContinue
-  foreach ($File in $Files) {
-    $RelativePath = $File.FullName.Substring($SourceAbs.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    if (Test-ExcludedRelativePath -RelativePath $RelativePath) {
-      continue
-    }
-
-    if ($File.Length -gt 1048576 -and -not $Risks.Contains("risk: file larger than 1 MB")) {
-      $Risks.Add("risk: file larger than 1 MB")
-      continue
-    }
-
-    try {
-      $Bytes = [System.IO.File]::ReadAllBytes($File.FullName)
-      if ($Bytes -contains 0) {
-        if (-not $Risks.Contains("risk: binary or unreadable file")) {
-          $Risks.Add("risk: binary or unreadable file")
-        }
-        continue
-      }
-
-      $StrictUtf8 = New-Object System.Text.UTF8Encoding -ArgumentList $false, $true
-      $Content = $StrictUtf8.GetString($Bytes)
-    } catch {
-      if (-not $Risks.Contains("risk: binary or unreadable file")) {
-        $Risks.Add("risk: binary or unreadable file")
-      }
-      continue
-    }
-
-    if ($Content -match $SecretPattern -and -not $Risks.Contains("risk: secret-like text")) {
-      $Risks.Add("risk: secret-like text")
-    }
-
-    if ($Content -match $LocalPathPattern -and -not $Risks.Contains("risk: local absolute path")) {
-      $Risks.Add("risk: local absolute path")
-    }
-  }
-
-  return $Risks
 }
 
 function Test-NonEmptyFile {
@@ -261,7 +199,7 @@ function Copy-SkillDirectory {
   $Items = Get-ChildItem -LiteralPath $FromAbs -Force -Recurse
   foreach ($Item in $Items) {
     $RelativePath = $Item.FullName.Substring($FromAbs.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
-    if (Test-ExcludedRelativePath -RelativePath $RelativePath) {
+    if (Test-OceansExcludedRelativePath -RelativePath $RelativePath) {
       continue
     }
 
@@ -359,7 +297,7 @@ if ($UnsupportedLinks.Count -gt 0) {
   exit 1
 }
 
-$Risks = @(Get-RiskNotes -SkillPath $SourceSkillPath)
+$Risks = @(Get-OceansSkillRiskNotes -SkillPath $SourceSkillPath)
 if ($Risks.Count -gt 0 -and -not $AllowRisk) {
   Write-Host "risk-blocked: $Skill"
   foreach ($Risk in $Risks) {

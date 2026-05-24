@@ -23,6 +23,19 @@ assert_contains() {
   esac
 }
 
+assert_not_contains() {
+  text=$1
+  unexpected=$2
+
+  case "$text" in
+    *"$unexpected"*)
+      echo "Expected output not to contain: $unexpected" >&2
+      echo "$text" >&2
+      exit 1
+      ;;
+  esac
+}
+
 cleanup() {
   rm -rf "$SANDBOX_ROOT"
 }
@@ -83,6 +96,25 @@ assert_contains "$OUTPUT" "no-skill"
 assert_contains "$OUTPUT" "missing-skill-md"
 assert_contains "$OUTPUT" ".system"
 assert_contains "$OUTPUT" "skip-system"
+
+BENIGN_ROOT=$SANDBOX_ROOT/benign-local-skills
+mkdir -p "$BENIGN_ROOT/benign-route-skill/data/__pycache__"
+cat > "$BENIGN_ROOT/benign-route-skill/SKILL.md" <<'EOF'
+---
+name: benign-route-skill
+description: Benign route path.
+---
+app/api/users/route.ts
+/homework/project
+EOF
+printf '%s\n' 'C:\Users\example\cache-only' > "$BENIGN_ROOT/benign-route-skill/data/__pycache__/cache.pyc"
+OUTPUT=$(sh "$REPO_ROOT/scripts/import-skills.sh" \
+  --source-root "$BENIGN_ROOT" \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT")
+assert_contains "$OUTPUT" "benign-route-skill"
+assert_contains "$OUTPUT" "risk: none detected"
+assert_not_contains "$OUTPUT" "risk: local absolute path"
 
 CODEX_HOME=$SANDBOX_ROOT/codex-home
 AGENTS_HOME=$SANDBOX_ROOT/agents-home
