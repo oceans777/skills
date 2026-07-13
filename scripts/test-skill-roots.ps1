@@ -2,7 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ScriptPath = Join-Path $RepoRoot "scripts\skill-roots.ps1"
-$SandboxRoot = Join-Path $env:TEMP ("oceans-roots-test-" + [Guid]::NewGuid().ToString("N"))
+$CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
+$SandboxRoot = Join-Path $CanonicalTemp ("oceans-roots-test-" + [Guid]::NewGuid().ToString("N"))
 
 function Assert-Contains {
   param(

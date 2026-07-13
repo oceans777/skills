@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
-$TestRoot = Join-Path $env:TEMP ("oceans-bundled-skills-test-" + [Guid]::NewGuid().ToString('N'))
+$CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
+$TestRoot = Join-Path $CanonicalTemp ("oceans-bundled-skills-test-" + [Guid]::NewGuid().ToString('N'))
 $AosRoot = Join-Path $RepoRoot 'repos\oceans-skills\skills\agent-operating-system'
 
 function Invoke-Git {

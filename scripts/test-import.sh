@@ -224,7 +224,7 @@ assert_contains "$OUTPUT" '"risks":["risk: secret-like text","risk: local absolu
 
 HOME=$SANDBOX_ROOT/fallback-home
 export HOME
-unset OPENCLAW_HOME HERMES_HOME
+unset OPENCLAW_HOME HERMES_HOME XDG_CONFIG_HOME
 mkdir -p "$HOME/.openclaw/skills/openclaw-home-skill"
 cat > "$HOME/.openclaw/skills/openclaw-home-skill/SKILL.md" <<'EOF'
 ---

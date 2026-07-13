@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$TestRoot = Join-Path $env:TEMP ("oceans-install-test-" + [Guid]::NewGuid().ToString("N"))
+$CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
+$TestRoot = Join-Path $CanonicalTemp ("oceans-install-test-" + [Guid]::NewGuid().ToString("N"))
 $FirstPartyRoot = Join-Path $TestRoot "first-party\skills"
 $CommunityRoot = Join-Path $TestRoot "community\skills"
 $SkillNames = @("local-first-test", "managed-update-test", "unknown-marker-test", "source-mismatch-test")
@@ -49,7 +50,7 @@ function Remove-TestRoot {
   }
 
   $ResolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $TestRoot).Path)
-  $ResolvedTemp = [System.IO.Path]::GetFullPath($env:TEMP)
+  $ResolvedTemp = $CanonicalTemp
   if (-not $ResolvedTemp.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
     $ResolvedTemp += [System.IO.Path]::DirectorySeparatorChar
   }

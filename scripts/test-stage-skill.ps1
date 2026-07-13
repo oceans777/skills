@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$SandboxRoot = Join-Path $env:TEMP ("oceans-stage-test-" + [Guid]::NewGuid().ToString("N"))
+$CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
+$SandboxRoot = Join-Path $CanonicalTemp ("oceans-stage-test-" + [Guid]::NewGuid().ToString("N"))
 
 function Assert-Contains {
   param(
@@ -53,7 +54,7 @@ function Remove-SandboxRoot {
   }
 
   $ResolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $SandboxRoot).Path)
-  $ResolvedTemp = [System.IO.Path]::GetFullPath($env:TEMP)
+  $ResolvedTemp = $CanonicalTemp
   if (-not $ResolvedTemp.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
     $ResolvedTemp += [System.IO.Path]::DirectorySeparatorChar
   }

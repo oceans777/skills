@@ -3,7 +3,8 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ScriptPath = Join-Path $RepoRoot "scripts\status.ps1"
 $WrapperPath = Join-Path $RepoRoot "oceans.ps1"
-$SandboxRoot = Join-Path $env:TEMP ("oceans-status-test-" + [Guid]::NewGuid().ToString("N"))
+$CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
+$SandboxRoot = Join-Path $CanonicalTemp ("oceans-status-test-" + [Guid]::NewGuid().ToString("N"))
 
 function Assert-Contains {
   param(

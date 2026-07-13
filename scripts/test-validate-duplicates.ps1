@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$TestRoot = Join-Path $env:TEMP ("oceans-validate-test-" + [Guid]::NewGuid().ToString("N"))
+$CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
+$TestRoot = Join-Path $CanonicalTemp ("oceans-validate-test-" + [Guid]::NewGuid().ToString("N"))
 
 function Assert-Contains {
   param(
@@ -23,7 +24,7 @@ function Remove-TestRoot {
   }
 
   $ResolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $TestRoot).Path)
-  $ResolvedTemp = [System.IO.Path]::GetFullPath($env:TEMP)
+  $ResolvedTemp = $CanonicalTemp
   if (-not $ResolvedTemp.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
     $ResolvedTemp += [System.IO.Path]::DirectorySeparatorChar
   }
