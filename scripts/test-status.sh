@@ -78,7 +78,7 @@ assert_not_contains "$OUTPUT" "path: $AGENTS_HOME/skills"
 
 HOME=$SANDBOX_ROOT/fallback-home
 export HOME
-unset OPENCLAW_HOME HERMES_HOME
+unset OPENCLAW_HOME HERMES_HOME XDG_CONFIG_HOME
 mkdir -p "$HOME/.openclaw/skills" "$HOME/.config/openclaw/skills"
 OUTPUT=$(sh "$SCRIPT_PATH" --all-existing-runtimes)
 assert_contains "$OUTPUT" "path: $HOME/.openclaw/skills"

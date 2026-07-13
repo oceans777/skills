@@ -95,7 +95,7 @@ assert_contains "$OUTPUT" "runtime: hermes"
 
 HOME=$SANDBOX_ROOT/fallback-home
 export HOME
-unset OPENCLAW_HOME HERMES_HOME
+unset OPENCLAW_HOME HERMES_HOME XDG_CONFIG_HOME
 mkdir -p "$HOME/.openclaw/skills" "$HOME/.config/openclaw/skills"
 mkdir -p "$HOME/.hermes/skills" "$HOME/.config/hermes/skills"
 OUTPUT=$(run_roots_success --mode install-all-existing)

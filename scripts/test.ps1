@@ -12,3 +12,4 @@ foreach ($Test in $Tests) {
 }
 
 Write-Host 'All PowerShell tests passed.'
+exit 0

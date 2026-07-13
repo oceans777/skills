@@ -110,7 +110,7 @@ AGENTS_HOME=$TEST_ROOT/agents-home
 CLAUDE_HOME=$TEST_ROOT/claude-existing-home
 HOME=$TEST_ROOT/fallback-home
 export CODEX_HOME AGENTS_HOME CLAUDE_HOME HOME
-unset OPENCLAW_HOME HERMES_HOME
+unset OPENCLAW_HOME HERMES_HOME XDG_CONFIG_HOME
 mkdir -p "$CODEX_HOME/skills" "$AGENTS_HOME/skills" "$CLAUDE_HOME/skills"
 mkdir -p "$HOME/.openclaw/skills" "$HOME/.config/openclaw/skills"
 OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" \
