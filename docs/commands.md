@@ -90,9 +90,11 @@ Normal users only need setup plus these commands. `import` is a report-only revi
 
 `sync` updates the entry repository and checks out child repositories at the versions pinned by the entry repository.
 
-`install` installs skills into the local Codex skills directory by default. Use `-Runtime` / `--runtime` for a specific runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` for every existing known runtime root. Local unmanaged skills always win and are not overwritten by repository skills with the same name.
+`install` validates all source skills before changing a runtime directory, then installs into the local Codex skills directory by default. Use `-Runtime` / `--runtime` for a specific runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` for every existing known runtime root. Local unmanaged skills always win and are not overwritten by repository skills with the same name. Managed updates use a sibling staging directory plus rename/rollback so a failed copy cannot erase the last working version.
 
-`validate` checks skill structure, required files, and third-party attribution.
+`validate` checks skill structure, metadata, third-party attribution, cross-repository names, symlinks, strict UTF-8, file size/type, secret-like content, and machine-local paths. This is the publication gate; `stage --allow-risk` does not bypass it.
+
+Shell `import` fails closed when a skills root or folder name contains control characters or the internal record delimiter, preventing malformed JSON and record confusion from hostile filesystem names.
 
 `test` runs all platform-specific behavioral tests. Shell tests run through `scripts/test.sh`; PowerShell tests run through `scripts/test.ps1`. CI runs both suites across Ubuntu, macOS, and Windows.
 
@@ -148,7 +150,7 @@ Ubuntu and macOS:
 ./oceans publish
 ```
 
-`stage` copies one explicitly named local skill into a target repository after validation and safety checks. `publish` validates staged skill changes, commits child repository skill updates when needed, updates submodule pins in the entry repository, and pushes normal `main` branches.
+`stage` copies one explicitly named local skill into a sibling staging directory after validation and safety checks, then activates the complete directory transactionally. Existing repository content is restored if activation fails. `publish` validates staged skill changes, commits child repository skill updates when needed, updates submodule pins in the entry repository, and pushes normal `main` branches. `--allow-risk` is only a local review escape hatch; publication validation remains fail-closed.
 
 Safety defaults:
 

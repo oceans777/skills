@@ -69,11 +69,23 @@ test_skill_directory() {
       add_failure "Missing referenced license file in $repository_name: $skill_name"
     fi
 
+    risk_notes=$(oceans_scan_skill_risks "$skill_path")
+    if [ -n "$risk_notes" ]; then
+      old_ifs=$IFS
+      IFS='
+'
+      for risk_note in $risk_notes; do
+        [ "$risk_note" = "risk: missing referenced license file" ] && continue
+        add_failure "Unsafe skill content in $repository_name: $skill_name: $risk_note"
+      done
+      IFS=$old_ifs
+    fi
+
     if [ -L "$skill_path" ]; then
       add_failure "Unsupported symlink in $repository_name: $skill_name"
     fi
 
-    symlinks=$(find "$skill_path" -type l -print)
+    symlinks=$(find "$skill_path" -type l -print 2>/dev/null)
     if [ -n "$symlinks" ]; then
       old_ifs=$IFS
       IFS='

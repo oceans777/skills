@@ -343,6 +343,16 @@ try {
   Assert-Contains -Text $Output -Expected "unsupported-symlink: reparse-skill"
   Assert-PathMissing -Path (Join-Path $Fixture.FirstPartyRoot "reparse-skill\external-link\secret.txt")
 
+  $Fixture = New-Fixture -Name "top-level-reparse-point-rejected"
+  $ExternalSkill = Join-Path $Fixture.Root "external-skill"
+  New-Item -ItemType Directory -Force -Path $ExternalSkill | Out-Null
+  Set-Content -LiteralPath (Join-Path $ExternalSkill "SKILL.md") -Value "---`nname: top-link-skill`ndescription: Top-level reparse point fixture.`n---`n" -Encoding UTF8
+  New-Item -ItemType Junction -Path (Join-Path $Fixture.SourceRoot "top-link-skill") -Target $ExternalSkill | Out-Null
+  $Args = (Get-BaseArgs -Fixture $Fixture -Skill "top-link-skill" -Target "oceans") + @("-AllowRisk")
+  $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure
+  Assert-Contains -Text $Output -Expected "unsupported-symlink: top-link-skill"
+  Assert-Contains -Text $Output -Expected "unsupported-symlink-path: ."
+
   $Fixture = New-Fixture -Name "community-missing-attribution"
   $Args = Get-BaseArgs -Fixture $Fixture -Skill "community-skill" -Target "community"
   $Output = Invoke-StageSkill -Fixture $Fixture -Arguments $Args -ExpectFailure

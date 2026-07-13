@@ -41,7 +41,7 @@ function Test-SkillDirectory {
     }
 
     if (-not $IsSkillReparsePoint) {
-      Get-ChildItem -LiteralPath $_.FullName -Force -Recurse -ErrorAction SilentlyContinue |
+      Get-OceansSkillItemsNoFollow -SkillPath $_.FullName |
         Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 } |
         ForEach-Object {
           $Failures.Add("Unsupported symlink in ${RepositoryName}: $($_.FullName)")
@@ -52,6 +52,12 @@ function Test-SkillDirectory {
       $Failures.Add("Missing SKILL.md in ${RepositoryName}: $($_.Name)")
     } elseif (Test-OceansMissingLicenseReference -SkillPath $_.FullName) {
       $Failures.Add("Missing referenced license file in ${RepositoryName}: $($_.Name)")
+    }
+
+    foreach ($Risk in @(Get-OceansSkillRiskNotes -SkillPath $_.FullName)) {
+      if ($Risk -ne "risk: missing referenced license file") {
+        $Failures.Add("Unsafe skill content in ${RepositoryName}: $($_.Name): $Risk")
+      }
     }
 
     if ($RequireUpstream) {

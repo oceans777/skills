@@ -379,6 +379,19 @@ EOF
   assert_contains "$OUTPUT" "staged-skill: excluded-link-skill"
   assert_path_exists "$FIRST_PARTY_ROOT/excluded-link-skill/SKILL.md"
   assert_path_missing "$FIRST_PARTY_ROOT/excluded-link-skill/node_modules/external-link.txt"
+
+  new_fixture top-level-symlink
+  mkdir -p "$FIXTURE_ROOT/external-skill"
+  cat > "$FIXTURE_ROOT/external-skill/SKILL.md" <<'EOF'
+---
+name: top-link-skill
+description: Top-level symlink fixture.
+---
+EOF
+  ln -s "$FIXTURE_ROOT/external-skill" "$SOURCE_ROOT/top-link-skill"
+  OUTPUT=$(run_stage_failure_common top-link-skill oceans --allow-risk)
+  assert_contains "$OUTPUT" "unsupported-symlink: top-link-skill"
+  assert_contains "$OUTPUT" "unsupported-symlink-path: ."
 else
   echo "Skipping symlink stage test: symbolic links are not available in this environment."
 fi

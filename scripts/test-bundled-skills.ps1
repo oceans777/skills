@@ -62,6 +62,40 @@ try {
         throw 'Generated AGENTS.md contains a personal response rule.'
     }
 
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $StartTaskScript `
+        -ProjectRoot $ProjectRoot `
+        -TaskName 'invalid-ignore' `
+        -BranchName 'bad..branch' `
+        -EnsureIgnore 2>$null | Out-Null
+    $InvalidBranchExit = $LASTEXITCODE
+    $ErrorActionPreference = $PreviousErrorActionPreference
+    if ($InvalidBranchExit -eq 0) {
+        throw 'Expected invalid branch name to be rejected.'
+    }
+    if (Test-Path -LiteralPath (Join-Path $ProjectRoot '.gitignore')) {
+        throw 'Failed task setup must not create .gitignore.'
+    }
+
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $StartTaskScript `
+        -ProjectRoot $ProjectRoot `
+        -TaskName 'escaped-ignore' `
+        -BranchName 'codex/escaped-ignore' `
+        -WorktreeDir '..\escaped-worktrees' `
+        -NoFetch `
+        -EnsureIgnore 2>$null | Out-Null
+    $EscapedPathExit = $LASTEXITCODE
+    $ErrorActionPreference = $PreviousErrorActionPreference
+    if ($EscapedPathExit -eq 0) {
+        throw 'Expected escaped ensure-ignore path to be rejected.'
+    }
+    if (Test-Path -LiteralPath (Join-Path $ProjectRoot '.gitignore')) {
+        throw 'Escaped task setup must not create .gitignore.'
+    }
+
     Push-Location $ProjectRoot
     try {
         Invoke-WindowsPowerShell -Arguments @('-File', $GeneratedBootstrap, '-SkipVerify')

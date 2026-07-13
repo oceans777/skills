@@ -84,9 +84,9 @@ Normal users only need setup plus these daily commands. `import` is a report for
 
 `oceans.ps1 sync` and `./oceans sync` pull the entry repository and update child repositories to the versions pinned by this repository.
 
-`oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory by default. You can target another runtime with `-Runtime` / `--runtime`, or install to every existing known runtime with `-AllExistingRuntimes` / `--all-existing-runtimes`. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker.
+`oceans.ps1 install` and `./oceans install` validate all source skills before changing any runtime directory, then install them into your local Codex skills directory by default. You can target another runtime with `-Runtime` / `--runtime`, or install to every existing known runtime with `-AllExistingRuntimes` / `--all-existing-runtimes`. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker. Managed updates are prepared in a sibling directory and activated by rename, with rollback of the previous version if activation fails.
 
-`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, required `SKILL.md` frontmatter, third-party attribution files, and cross-repository skill name uniqueness.
+`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, required `SKILL.md` frontmatter, third-party attribution files, cross-repository skill name uniqueness, symlinks, strict UTF-8 text, oversized or binary files, secret-like content, and machine-local paths.
 
 `oceans.ps1 test` and `./oceans test` run the platform-specific behavioral test suite. GitHub Actions runs the Shell suite on Ubuntu and macOS and the PowerShell suite on Windows.
 
@@ -150,8 +150,9 @@ Publishing safety defaults:
 stage requires an explicit single skill name
 stage validates SKILL.md name, description, and folder-name consistency
 stage does not overwrite an existing repository skill unless replace-existing is requested
-stage blocks risky content unless allow-risk is requested
+stage blocks risky content unless allow-risk is requested for local review; publish validation still rejects unsafe repository content
 stage rejects symlinks and reparse points instead of dereferencing them
+stage prepares a complete sibling directory and atomically replaces an existing skill only after copying succeeds
 community skills require non-empty upstream, patch, and license records before publishing
 publish only pushes allowed skill changes and entry submodule pointer changes
 publish never force-pushes
@@ -170,6 +171,8 @@ skills/
     oceans-skills/
     community-skills/
   scripts/
+    directory-transaction.ps1
+    directory-transaction.sh
     install-skills.ps1
     install-skills.sh
     sync.ps1
@@ -340,7 +343,7 @@ Forked or adapted from other authors -> repos/community-skills/skills/<skill-nam
 Private or source unclear   -> do not publish yet
 ```
 
-The report also flags missing metadata, missing referenced license files, secret-like text, local absolute paths, large files, and binary or unreadable files so you can review them before publishing. Use JSON output when another script or UI needs to consume the report programmatically.
+The report also flags missing metadata, missing referenced license files, secret-like text, local absolute paths, large files, and binary or unreadable files so you can review them before publishing. Use JSON output when another script or UI needs to consume the report programmatically. On Shell platforms, filesystem names containing control characters or the internal record delimiter are rejected instead of producing ambiguous or invalid JSON.
 
 ## Contribute Or Upload A Skill
 
@@ -434,7 +437,7 @@ Ubuntu and macOS:
   --patch-summary "Adapted metadata and packaging for oceans777."
 ```
 
-Use `-AllowRisk` / `--allow-risk` only after reviewing every risk line. Use `-ReplaceExisting` / `--replace-existing` only when intentionally replacing an existing repository skill.
+Use `-AllowRisk` / `--allow-risk` only to place reviewed content in a local child-repository worktree for further repair; it is not a publication bypass, and `validate` / `publish` still reject unsafe content. Use `-ReplaceExisting` / `--replace-existing` only when intentionally replacing an existing repository skill. Replacement is transactional: the previous directory remains available for rollback until the new directory is fully prepared and activated.
 
 ### Contributors Without Write Access
 
@@ -479,6 +482,7 @@ scripts/import-skills.ps1 / scripts/import-skills.sh   -> scan and report
 scripts/stage-skill.ps1 / scripts/stage-skill.sh       -> copy one reviewed skill
 scripts/publish-skills.ps1 / scripts/publish-skills.sh -> commit, pin, and push
 scripts/skill-publish-rules.*                          -> shared metadata and risk rules
+scripts/directory-transaction.*                       -> staged directory activation, locking, recovery, and rollback
 ```
 
 ## Add A First-Party Skill

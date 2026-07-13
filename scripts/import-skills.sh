@@ -84,6 +84,29 @@ trap 'cleanup_import_roots; exit 129' HUP
 trap 'cleanup_import_roots; exit 130' INT
 trap 'cleanup_import_roots; exit 143' TERM
 
+assert_safe_record_field() {
+  label=$1
+  value=$2
+  case "$value" in
+    *'|'*)
+      echo "Unsafe $label contains the internal record delimiter." >&2
+      exit 1
+      ;;
+  esac
+  newline_count=$(printf '%s' "$value" | wc -l | tr -d '[:space:]')
+  if [ "$newline_count" -ne 0 ]; then
+    echo "Unsafe $label contains control characters." >&2
+    exit 1
+  fi
+  if printf '%s' "$value" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+    echo "Unsafe $label contains control characters." >&2
+    exit 1
+  fi
+}
+
+assert_safe_record_field "first-party target" "$FIRST_PARTY_ROOT"
+assert_safe_record_field "community target" "$COMMUNITY_ROOT"
+
 add_scan_root() {
   runtime=$1
   root_path=$2
@@ -94,6 +117,7 @@ add_scan_root() {
   fi
 
   root_real=$(absolute_path "$root_path")
+  assert_safe_record_field "skills root" "$root_real"
   printf '%s|%s\n' "$runtime" "$root_real" >> "$ROOTS_FILE"
 }
 
@@ -306,7 +330,15 @@ print_item() {
 }
 
 json_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '%s' "$1" | awk 'BEGIN { ORS="" }
+    {
+      if (NR > 1) printf "\\n"
+      gsub(/\\/, "\\\\")
+      gsub(/"/, "\\\"")
+      gsub(/\r/, "\\r")
+      gsub(/\t/, "\\t")
+      printf "%s", $0
+    }'
 }
 
 json_string() {
@@ -387,6 +419,8 @@ while IFS='|' read -r runtime source_root; do
     skill_name=${skill_path##*/}
     [ "$skill_name" != "." ] || continue
     [ "$skill_name" != ".." ] || continue
+    assert_safe_record_field "skill folder name" "$skill_name"
+    assert_safe_record_field "skill path" "$skill_path"
     printf '%s|%s|%s|%s\n' "$skill_name" "$runtime" "$source_root" "$skill_path" >> "$RECORDS_FILE"
   done
 done < "$ROOTS_FILE"

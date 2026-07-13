@@ -18,6 +18,16 @@ function Assert-Contains {
   }
 }
 
+function Assert-NotContains {
+  param(
+    [Parameter(Mandatory = $true)][string] $Text,
+    [Parameter(Mandatory = $true)][string] $Unexpected
+  )
+  if ($Text.Contains($Unexpected)) {
+    throw "Expected output not to contain: $Unexpected"
+  }
+}
+
 function Remove-TestRoot {
   if (-not (Test-Path -LiteralPath $TestRoot)) {
     return
@@ -124,6 +134,44 @@ try {
     throw "Expected validate to fail for invalid folder name without SKILL.md."
   }
   Assert-Contains -Text $Result.Output -Expected "Invalid skill metadata in oceans-skills: bad folder: risk: invalid skill folder name"
+
+  $SecretRisk = Join-Path $FirstPartyRoot "secret-risk"
+  New-Item -ItemType Directory -Force -Path $SecretRisk | Out-Null
+  Set-Content -LiteralPath (Join-Path $SecretRisk "SKILL.md") -Value "---`nname: secret-risk`ndescription: Risk scan fixture.`n---`napi_key=sk-example-not-a-real-secret`n" -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  if ($Result.ExitCode -eq 0) { throw "Expected validate to fail for secret-like content." }
+  Assert-Contains -Text $Result.Output -Expected "Unsafe skill content in oceans-skills: secret-risk: risk: secret-like text"
+
+  $ValidUtf8 = Join-Path $FirstPartyRoot "valid-utf8"
+  New-Item -ItemType Directory -Force -Path $ValidUtf8 | Out-Null
+  Set-Content -LiteralPath (Join-Path $ValidUtf8 "SKILL.md") -Value "---`nname: valid-utf8`ndescription: Valid UTF-8 fixture.`n---`n中文内容应当通过严格 UTF-8 检查。`n" -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  Assert-NotContains -Text $Result.Output -Unexpected "Unsafe skill content in oceans-skills: valid-utf8: risk: binary or unreadable file"
+
+  $InvalidUtf8 = Join-Path $FirstPartyRoot "invalid-utf8"
+  New-Item -ItemType Directory -Force -Path $InvalidUtf8 | Out-Null
+  [System.IO.File]::WriteAllBytes((Join-Path $InvalidUtf8 "SKILL.md"), [byte[]](0xFF, 0xFE, 0x00))
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  if ($Result.ExitCode -eq 0) { throw "Expected validate to fail for invalid UTF-8." }
+  Assert-Contains -Text $Result.Output -Expected "Unsafe skill content in oceans-skills: invalid-utf8: risk: binary or unreadable file"
+
+  $Unterminated = Join-Path $FirstPartyRoot "unterminated-frontmatter"
+  New-Item -ItemType Directory -Force -Path $Unterminated | Out-Null
+  Set-Content -LiteralPath (Join-Path $Unterminated "SKILL.md") -Value "---`nname: unterminated-frontmatter`ndescription: This frontmatter never closes.`n" -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  Assert-Contains -Text $Result.Output -Expected "risk: missing or unterminated skill frontmatter"
+
+  $DuplicateKey = Join-Path $FirstPartyRoot "duplicate-key"
+  New-Item -ItemType Directory -Force -Path $DuplicateKey | Out-Null
+  Set-Content -LiteralPath (Join-Path $DuplicateKey "SKILL.md") -Value "---`nname: duplicate-key`nname: shadow-name`ndescription: Duplicate key fixture.`n---`n" -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  Assert-Contains -Text $Result.Output -Expected "risk: duplicate frontmatter key: name"
+
+  $BlockDescription = Join-Path $FirstPartyRoot "block-description"
+  New-Item -ItemType Directory -Force -Path $BlockDescription | Out-Null
+  Set-Content -LiteralPath (Join-Path $BlockDescription "SKILL.md") -Value "---`nname: block-description`ndescription: |`n  Valid multiline description.`n---`n" -Encoding UTF8
+  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
+  Assert-NotContains -Text $Result.Output -Unexpected "Invalid skill metadata in oceans-skills: block-description"
 
   Write-Host "PowerShell validate duplicate test passed."
 } finally {

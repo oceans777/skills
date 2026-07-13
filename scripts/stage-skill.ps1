@@ -24,6 +24,7 @@ $RequestedSourceRoot = $SourceRoot
 $RequestedRuntime = $Runtime
 . (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
 . (Join-Path $ScriptRoot "skill-publish-rules.ps1")
+. (Join-Path $ScriptRoot "directory-transaction.ps1")
 $SourceRoot = $RequestedSourceRoot
 $Runtime = $RequestedRuntime
 
@@ -133,7 +134,7 @@ function Get-UnsupportedLinkPaths {
   $Unsupported = New-Object System.Collections.Generic.List[string]
   $SourceAbs = Resolve-AbsolutePath -Path $SkillPath
 
-  $Items = Get-ChildItem -LiteralPath $SourceAbs -Force -Recurse -ErrorAction SilentlyContinue
+  $Items = Get-OceansSkillItemsNoFollow -SkillPath $SourceAbs
   foreach ($Item in $Items) {
     if (-not (Test-ReparsePoint -Item $Item)) {
       continue
@@ -276,6 +277,12 @@ if (-not (Test-Path -LiteralPath $SourceSkillPath -PathType Container)) {
   Write-Host "missing-source-skill: $SourceSkillPath"
   exit 1
 }
+$SourceSkillItem = Get-Item -LiteralPath $SourceSkillPath -Force
+if (Test-ReparsePoint -Item $SourceSkillItem) {
+  Write-Host "unsupported-symlink: $Skill"
+  Write-Host "unsupported-symlink-path: ."
+  exit 1
+}
 
 $SourceSkillPath = Resolve-AbsolutePath -Path $SourceSkillPath
 if (-not (Test-Path -LiteralPath (Join-Path $SourceSkillPath "SKILL.md") -PathType Leaf)) {
@@ -289,6 +296,14 @@ if ($MetadataIssues.Count -gt 0) {
   foreach ($Issue in $MetadataIssues) {
     Write-Host $Issue
   }
+  Write-Host "risk_status: blocked"
+  exit 1
+}
+
+$PathIssues = @(Get-OceansSkillPathIssues -SkillPath $SourceSkillPath)
+if ($PathIssues.Count -gt 0) {
+  Write-Host "unsafe-skill-path: $Skill"
+  foreach ($PathIssue in $PathIssues) { Write-Host $PathIssue }
   Write-Host "risk_status: blocked"
   exit 1
 }
@@ -343,15 +358,20 @@ if ($DryRun) {
   exit 0
 }
 
-if (Test-Path -LiteralPath $TargetPath -PathType Container) {
-  Assert-PathInsideRoot -Path $TargetPath -Root $TargetSkillsRoot
-  Remove-Item -LiteralPath (Resolve-AbsolutePath -Path $TargetPath) -Recurse -Force
-}
+$StagingPath = New-OceansStagingDirectory -TargetPath $TargetPath
+try {
+  Copy-SkillDirectory -From $SourceSkillPath -To $StagingPath
 
-Copy-SkillDirectory -From $SourceSkillPath -To $TargetPath
+  if ($Target -eq "community") {
+    Write-CommunityAttribution -TargetPath $StagingPath
+  }
 
-if ($Target -eq "community") {
-  Write-CommunityAttribution -TargetPath $TargetPath
+  Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $TargetPath
+} catch {
+  if (Test-Path -LiteralPath $StagingPath) {
+    Remove-Item -LiteralPath $StagingPath -Recurse -Force
+  }
+  throw "Failed to stage $Skill; existing repository content was preserved or restored. $($_.Exception.Message)"
 }
 
 Write-Host "staged-skill: $Skill"

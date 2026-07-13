@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
+. "$SCRIPT_DIR/directory-transaction.sh"
 
 INSTALL_ROOT=
 RUNTIME=codex
@@ -55,6 +56,13 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if ! sh "$SCRIPT_DIR/validate-skills.sh" \
+  --first-party-root "$FIRST_PARTY_SKILLS_ROOT" \
+  --community-root "$COMMUNITY_SKILLS_ROOT" >/dev/null; then
+  echo "Refusing to install from an invalid or unsafe skill repository." >&2
+  exit 1
+fi
 
 INSTALL_TARGETS_FILE=$(mktemp "${TMPDIR:-/tmp}/oceans-install-targets.XXXXXX") || exit 1
 
@@ -172,6 +180,11 @@ install_from_repository() {
         ;;
     esac
 
+    if [ -L "$target" ]; then
+      echo "duplicate-local-wins: $skill_name"
+      continue
+    fi
+
     if [ -e "$target" ]; then
       marker=$target/.oceans-skill-source
       if [ ! -f "$marker" ]; then
@@ -190,19 +203,34 @@ install_from_repository() {
         continue
       fi
 
-      rm -rf "$target"
       is_update=1
     else
       is_update=0
     fi
 
-    cp -R "$skill_path" "$target"
-    {
+    staging_path=$(oceans_new_staging_directory "$target") || exit 1
+    if ! cp -R "$skill_path"/. "$staging_path"; then
+      rm -rf "$staging_path"
+      echo "Failed to prepare skill update; existing installation was preserved: $skill_name" >&2
+      exit 1
+    fi
+    oceans_remove_excluded_paths "$staging_path"
+    if ! {
       echo "source_repository=$repository_name"
       echo "source_path=$skill_path"
       echo "runtime=$runtime"
       echo "install_root=$install_root_real"
-    } > "$target/.oceans-skill-source"
+    } > "$staging_path/.oceans-skill-source"; then
+      rm -rf "$staging_path"
+      echo "Failed to prepare skill marker; existing installation was preserved: $skill_name" >&2
+      exit 1
+    fi
+
+    if ! oceans_commit_staged_directory "$staging_path" "$target"; then
+      rm -rf "$staging_path"
+      echo "Failed to commit skill update; existing installation was restored: $skill_name" >&2
+      exit 1
+    fi
     if [ "$is_update" -eq 1 ]; then
       echo "Updated managed oceans777 skill: $skill_name"
     else

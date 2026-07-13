@@ -14,6 +14,8 @@ $RepoRoot = Split-Path -Parent $ScriptRoot
 $RequestedInstallRoot = $InstallRoot
 $RequestedRuntime = $Runtime
 . (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
+. (Join-Path $ScriptRoot "directory-transaction.ps1")
+. (Join-Path $ScriptRoot "skill-publish-rules.ps1")
 $InstallRoot = $RequestedInstallRoot
 $Runtime = $RequestedRuntime
 
@@ -23,6 +25,14 @@ if (-not $FirstPartySkillsRoot) {
 
 if (-not $CommunitySkillsRoot) {
   $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills"
+}
+
+try {
+  & (Join-Path $ScriptRoot "validate-skills.ps1") `
+    -FirstPartySkillsRoot $FirstPartySkillsRoot `
+    -CommunitySkillsRoot $CommunitySkillsRoot | Out-Null
+} catch {
+  throw "Refusing to install from an invalid or unsafe skill repository. $($_.Exception.Message)"
 }
 
 $Sources = @(
@@ -81,6 +91,9 @@ function Install-OceansSkillsToRoot {
 
     Get-ChildItem -Path $Source.Path -Directory | ForEach-Object {
       $SkillName = $_.Name
+      if (-not (Test-OceansSkillName -Name $SkillName)) {
+        throw "Invalid skill folder name in $($Source.Repository): $SkillName"
+      }
       $Target = Join-Path $InstallTarget.Path $SkillName
       $ResolvedTarget = [System.IO.Path]::GetFullPath($Target)
 
@@ -91,11 +104,16 @@ function Install-OceansSkillsToRoot {
       $ShouldInstall = $true
       $IsUpdate = $false
       if (Test-Path -LiteralPath $Target) {
-        $Marker = Join-Path $Target ".oceans-skill-source"
-        if (-not (Test-Path -LiteralPath $Marker)) {
+        $TargetItem = Get-Item -LiteralPath $Target -Force
+        if (($TargetItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
           Write-Host "duplicate-local-wins: $SkillName"
           $ShouldInstall = $false
-        } else {
+        }
+        $Marker = Join-Path $Target ".oceans-skill-source"
+        if ($ShouldInstall -and -not (Test-Path -LiteralPath $Marker)) {
+          Write-Host "duplicate-local-wins: $SkillName"
+          $ShouldInstall = $false
+        } elseif ($ShouldInstall) {
           $ExistingSource = Get-SourceRepository -MarkerPath $Marker
           if (-not (Test-KnownOceansSource -Repository $ExistingSource)) {
             Write-Host "duplicate-unknown-marker: $SkillName"
@@ -104,22 +122,35 @@ function Install-OceansSkillsToRoot {
             Write-Host "duplicate-managed-source-mismatch: $SkillName"
             $ShouldInstall = $false
           } else {
-            Remove-Item -LiteralPath $Target -Recurse -Force
             $IsUpdate = $true
           }
         }
       }
 
       if ($ShouldInstall) {
-        Copy-Item -LiteralPath $_.FullName -Destination $Target -Recurse
-
-        $MarkerContent = @(
-          "source_repository=$($Source.Repository)"
-          "source_path=$($_.FullName)"
-          "runtime=$($InstallTarget.Runtime)"
-          "install_root=$($InstallTarget.Path)"
-        )
-        Set-Content -LiteralPath (Join-Path $Target ".oceans-skill-source") -Value $MarkerContent -Encoding UTF8
+        $StagingPath = New-OceansStagingDirectory -TargetPath $Target
+        try {
+          Get-ChildItem -LiteralPath $_.FullName -Force |
+            Copy-Item -Destination $StagingPath -Recurse -Force
+          Remove-OceansExcludedPaths -RootPath $StagingPath
+          $CopiedMarker = Join-Path $StagingPath ".oceans-skill-source"
+          if (Test-Path -LiteralPath $CopiedMarker) {
+            Remove-Item -LiteralPath $CopiedMarker -Force
+          }
+          $MarkerContent = @(
+            "source_repository=$($Source.Repository)"
+            "source_path=$($_.FullName)"
+            "runtime=$($InstallTarget.Runtime)"
+            "install_root=$($InstallTarget.Path)"
+          )
+          Set-Content -LiteralPath $CopiedMarker -Value $MarkerContent -Encoding UTF8
+          Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $Target
+        } catch {
+          if (Test-Path -LiteralPath $StagingPath) {
+            Remove-Item -LiteralPath $StagingPath -Recurse -Force
+          }
+          throw "Failed to install $SkillName; existing installation was preserved or restored. $($_.Exception.Message)"
+        }
         if ($IsUpdate) {
           Write-Host "Updated managed oceans777 skill: $SkillName"
         } else {

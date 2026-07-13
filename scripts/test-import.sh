@@ -248,4 +248,18 @@ assert_contains "$OUTPUT" "source_root: $HOME/.config/openclaw/skills"
 assert_contains "$OUTPUT" "openclaw-home-skill"
 assert_contains "$OUTPUT" "openclaw-config-skill"
 
+UNSAFE_ROOT="$SANDBOX_ROOT/unsafe-root"
+mkdir -p "$UNSAFE_ROOT"
+UNSAFE_NAME=$(printf 'bad\nname')
+mkdir -p "$UNSAFE_ROOT/$UNSAFE_NAME"
+if OUTPUT=$(sh "$REPO_ROOT/scripts/import-skills.sh" \
+  --source-root "$UNSAFE_ROOT" \
+  --first-party-root "$FIRST_PARTY_ROOT" \
+  --community-root "$COMMUNITY_ROOT" \
+  --format json 2>&1); then
+  echo 'Expected unsafe record field to fail closed.' >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "Unsafe skill folder name contains control characters."
+
 echo "Shell import test passed."

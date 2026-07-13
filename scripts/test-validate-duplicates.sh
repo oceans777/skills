@@ -20,6 +20,17 @@ assert_contains() {
   esac
 }
 
+assert_not_contains() {
+  text=$1
+  unexpected=$2
+  case "$text" in
+    *"$unexpected"*)
+      echo "Expected output not to contain: $unexpected" >&2
+      exit 1
+      ;;
+  esac
+}
+
 cleanup() {
   rm -rf "$TEST_ROOT"
 }
@@ -108,5 +119,117 @@ if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRS
   exit 1
 fi
 assert_contains "$OUTPUT" "Invalid skill metadata in oceans-skills: bad folder: risk: invalid skill folder name"
+
+mkdir -p "$FIRST_PARTY_ROOT/secret-risk"
+cat > "$FIRST_PARTY_ROOT/secret-risk/SKILL.md" <<'EOF'
+---
+name: secret-risk
+description: Risk scan fixture.
+---
+api_key=sk-example-not-a-real-secret
+EOF
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected validate to fail for secret-like content." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "Unsafe skill content in oceans-skills: secret-risk: risk: secret-like text"
+
+mkdir -p "$FIRST_PARTY_ROOT/valid-utf8"
+cat > "$FIRST_PARTY_ROOT/valid-utf8/SKILL.md" <<'EOF'
+---
+name: valid-utf8
+description: Valid UTF-8 fixture.
+---
+中文内容应当在 macOS 和 Linux 上通过严格 UTF-8 检查。
+EOF
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected earlier invalid fixtures to keep validation failing." >&2
+  exit 1
+fi
+assert_not_contains "$OUTPUT" "Unsafe skill content in oceans-skills: valid-utf8: risk: binary or unreadable file"
+
+mkdir -p "$FIRST_PARTY_ROOT/blank-utf8"
+cat > "$FIRST_PARTY_ROOT/blank-utf8/SKILL.md" <<'EOF'
+---
+name: blank-utf8
+description: Blank UTF-8 fixture.
+---
+
+EOF
+printf '\n' > "$FIRST_PARTY_ROOT/blank-utf8/blank.txt"
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected earlier invalid fixtures to keep validation failing." >&2
+  exit 1
+fi
+assert_not_contains "$OUTPUT" "Unsafe skill content in oceans-skills: blank-utf8: risk: binary or unreadable file"
+
+mkdir -p "$FIRST_PARTY_ROOT/invalid-utf8"
+cat > "$FIRST_PARTY_ROOT/invalid-utf8/SKILL.md" <<'EOF'
+---
+name: invalid-utf8
+description: Invalid UTF-8 fixture.
+---
+EOF
+printf '\377\376' >> "$FIRST_PARTY_ROOT/invalid-utf8/SKILL.md"
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected validate to fail for invalid UTF-8." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "Unsafe skill content in oceans-skills: invalid-utf8: risk: binary or unreadable file"
+
+mkdir -p "$FIRST_PARTY_ROOT/unterminated-frontmatter"
+cat > "$FIRST_PARTY_ROOT/unterminated-frontmatter/SKILL.md" <<'EOF'
+---
+name: unterminated-frontmatter
+description: This frontmatter never closes.
+EOF
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected unterminated frontmatter to fail." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "risk: missing or unterminated skill frontmatter"
+
+mkdir -p "$FIRST_PARTY_ROOT/duplicate-key"
+cat > "$FIRST_PARTY_ROOT/duplicate-key/SKILL.md" <<'EOF'
+---
+name: duplicate-key
+name: shadow-name
+description: Duplicate key fixture.
+---
+EOF
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected duplicate frontmatter key to fail." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "risk: duplicate frontmatter key: name"
+
+mkdir -p "$FIRST_PARTY_ROOT/block-description"
+cat > "$FIRST_PARTY_ROOT/block-description/SKILL.md" <<'EOF'
+---
+name: block-description
+description: |
+  Valid multiline description.
+---
+EOF
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected earlier invalid fixtures to keep validation failing." >&2
+  exit 1
+fi
+assert_not_contains "$OUTPUT" "Invalid skill metadata in oceans-skills: block-description"
+
+mkdir -p "$FIRST_PARTY_ROOT/unsafe-nested-path"
+cat > "$FIRST_PARTY_ROOT/unsafe-nested-path/SKILL.md" <<'EOF'
+---
+name: unsafe-nested-path
+description: Unsafe nested path fixture.
+---
+EOF
+UNSAFE_NESTED_NAME=$(printf 'bad\nname.txt')
+printf '%s\n' unsafe > "$FIRST_PARTY_ROOT/unsafe-nested-path/$UNSAFE_NESTED_NAME"
+if OUTPUT=$(sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" 2>&1); then
+  echo "Expected unsafe nested path to fail." >&2
+  exit 1
+fi
+assert_contains "$OUTPUT" "Unsafe skill content in oceans-skills: unsafe-nested-path: risk: unsafe filesystem path"
 
 echo "Shell validate duplicate test passed."

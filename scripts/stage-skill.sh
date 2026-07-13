@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 . "$SCRIPT_DIR/skill-publish-rules.sh"
+. "$SCRIPT_DIR/directory-transaction.sh"
 
 SOURCE_ROOT=
 RUNTIME=codex
@@ -230,6 +231,11 @@ if [ ! -d "$SOURCE_SKILL" ]; then
   echo "missing-source-skill: $SOURCE_SKILL"
   exit 1
 fi
+if [ -L "$SOURCE_SKILL" ]; then
+  echo "unsupported-symlink: $SKILL"
+  echo "unsupported-symlink-path: ."
+  exit 1
+fi
 
 SOURCE_SKILL=$(CDPATH= cd "$SOURCE_SKILL" && pwd -P)
 if [ ! -f "$SOURCE_SKILL/SKILL.md" ]; then
@@ -241,6 +247,14 @@ METADATA_ISSUES=$(oceans_skill_metadata_issues "$SOURCE_SKILL" "$SKILL")
 if [ -n "$METADATA_ISSUES" ]; then
   echo "invalid-skill-metadata: $SKILL"
   printf '%s\n' "$METADATA_ISSUES"
+  echo "risk_status: blocked"
+  exit 1
+fi
+
+PATH_ISSUES=$(oceans_skill_path_issues "$SOURCE_SKILL")
+if [ -n "$PATH_ISSUES" ]; then
+  echo "unsafe-skill-path: $SKILL"
+  printf '%s\n' "$PATH_ISSUES"
   echo "risk_status: blocked"
   exit 1
 fi
@@ -358,12 +372,17 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-if [ -d "$TARGET_PATH" ]; then
-  assert_path_inside_root "$TARGET_PATH" "$TARGET_ROOT"
-  rm -rf "$TARGET_PATH"
-fi
+STAGING_PATH=$(oceans_new_staging_directory "$TARGET_PATH") || exit 1
+cleanup_staging_path() {
+  if [ -n "${STAGING_PATH:-}" ] && [ -d "$STAGING_PATH" ]; then
+    rm -rf "$STAGING_PATH"
+  fi
+}
+trap 'cleanup_staging_path' EXIT
+trap 'cleanup_staging_path; exit 129' HUP
+trap 'cleanup_staging_path; exit 130' INT
+trap 'cleanup_staging_path; exit 143' TERM
 
-mkdir -p "$TARGET_PATH"
 (CDPATH= cd "$SOURCE_SKILL" && find . -mindepth 1 -print) | while IFS= read -r item; do
   rel=${item#./}
   if oceans_is_excluded_relative_path "$rel"; then
@@ -374,15 +393,15 @@ mkdir -p "$TARGET_PATH"
     echo "Unsupported symlink in skill: $rel" >&2
     exit 1
   elif [ -d "$SOURCE_SKILL/$rel" ]; then
-    mkdir -p "$TARGET_PATH/$rel"
+    mkdir -p "$STAGING_PATH/$rel"
   elif [ -f "$SOURCE_SKILL/$rel" ]; then
-    mkdir -p "$TARGET_PATH/$(dirname "$rel")"
-    cp "$SOURCE_SKILL/$rel" "$TARGET_PATH/$rel"
+    mkdir -p "$STAGING_PATH/$(dirname "$rel")"
+    cp "$SOURCE_SKILL/$rel" "$STAGING_PATH/$rel"
   fi
 done
 
 if [ "$TARGET" = "community" ]; then
-  if ! non_empty_file "$TARGET_PATH/UPSTREAM.md"; then
+  if ! non_empty_file "$STAGING_PATH/UPSTREAM.md"; then
     {
       echo "# Upstream"
       echo
@@ -390,10 +409,10 @@ if [ "$TARGET" = "community" ]; then
       echo "Original author: $UPSTREAM_AUTHOR"
       echo "License: $UPSTREAM_LICENSE"
       echo "Imported by: oceans777"
-    } > "$TARGET_PATH/UPSTREAM.md"
+    } > "$STAGING_PATH/UPSTREAM.md"
   fi
 
-  if ! non_empty_file "$TARGET_PATH/PATCHES.md"; then
+  if ! non_empty_file "$STAGING_PATH/PATCHES.md"; then
     {
       echo "# Patches"
       echo
@@ -402,12 +421,18 @@ if [ "$TARGET" = "community" ]; then
       else
         echo "No local changes."
       fi
-    } > "$TARGET_PATH/PATCHES.md"
+    } > "$STAGING_PATH/PATCHES.md"
   fi
 
-  if ! non_empty_file "$TARGET_PATH/LICENSE"; then
-    cp "$LICENSE_FILE" "$TARGET_PATH/LICENSE"
+  if ! non_empty_file "$STAGING_PATH/LICENSE"; then
+    cp "$LICENSE_FILE" "$STAGING_PATH/LICENSE"
   fi
 fi
+
+if ! oceans_commit_staged_directory "$STAGING_PATH" "$TARGET_PATH"; then
+  echo "Failed to commit staged skill; existing repository content was preserved or restored: $SKILL" >&2
+  exit 1
+fi
+STAGING_PATH=
 
 print_success false
