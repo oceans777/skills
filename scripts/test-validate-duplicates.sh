@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-validate-test.XXXXXX")
+TEST_ROOT=$(CDPATH= cd "$TEST_ROOT" && pwd -P)
 
 assert_contains() {
   text=$1

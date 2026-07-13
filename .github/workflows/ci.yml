@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  shell:
+    name: Shell (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Validate skills
+        run: ./oceans validate
+      - name: Run shell tests
+        run: ./oceans test
+
+  powershell:
+    name: PowerShell (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Validate skills
+        shell: pwsh
+        run: .\oceans.ps1 validate
+      - name: Run PowerShell tests
+        shell: pwsh
+        run: .\oceans.ps1 test

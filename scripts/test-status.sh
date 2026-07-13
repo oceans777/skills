@@ -6,6 +6,7 @@ REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SCRIPT_PATH=$REPO_ROOT/scripts/status.sh
 WRAPPER_PATH=$REPO_ROOT/oceans
 SANDBOX_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-status-test.XXXXXX")
+SANDBOX_ROOT=$(CDPATH= cd "$SANDBOX_ROOT" && pwd -P)
 
 assert_contains() {
   text=$1

@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SANDBOX_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-stage-test.XXXXXX")
+SANDBOX_ROOT=$(CDPATH= cd "$SANDBOX_ROOT" && pwd -P)
 
 assert_contains() {
   text=$1

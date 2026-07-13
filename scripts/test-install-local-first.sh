@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-install-test.XXXXXX")
+TEST_ROOT=$(CDPATH= cd "$TEST_ROOT" && pwd -P)
 FIRST_PARTY_ROOT=$TEST_ROOT/first-party/skills
 COMMUNITY_ROOT=$TEST_ROOT/community/skills
 SKILL_NAMES="local-first-test managed-update-test unknown-marker-test source-mismatch-test"

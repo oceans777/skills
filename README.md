@@ -60,6 +60,7 @@ skills/
 .\oceans.ps1 sync
 .\oceans.ps1 install
 .\oceans.ps1 validate
+.\oceans.ps1 test
 .\oceans.ps1 status
 .\oceans.ps1 import
 ```
@@ -70,6 +71,7 @@ skills/
 ./oceans sync
 ./oceans install
 ./oceans validate
+./oceans test
 ./oceans status
 ./oceans import
 ```
@@ -85,6 +87,8 @@ Normal users only need setup plus these daily commands. `import` is a report for
 `oceans.ps1 install` and `./oceans install` install all discovered oceans777 skills into your local Codex skills directory by default. You can target another runtime with `-Runtime` / `--runtime`, or install to every existing known runtime with `-AllExistingRuntimes` / `--all-existing-runtimes`. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker.
 
 `oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, required `SKILL.md` frontmatter, third-party attribution files, and cross-repository skill name uniqueness.
+
+`oceans.ps1 test` and `./oceans test` run the platform-specific behavioral test suite. GitHub Actions runs the Shell suite on Ubuntu and macOS and the PowerShell suite on Windows.
 
 `oceans.ps1 status` and `./oceans status` show Git status, submodule status, known runtime skill roots, and managed oceans777 skill counts. Use `-Runtime` / `--runtime` to inspect one runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` to show only roots that already exist.
 

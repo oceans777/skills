@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("sync", "install", "validate", "status", "import", "stage", "publish", "help")]
+  [ValidateSet("sync", "install", "validate", "test", "status", "import", "stage", "publish", "help")]
   [string] $Command = "help",
 
   [string] $SourceRoot,
@@ -34,6 +34,9 @@ switch ($Command) {
   }
   "validate" {
     & "$RepoRoot\scripts\validate-skills.ps1"
+  }
+  "test" {
+    & "$RepoRoot\scripts\test.ps1"
   }
   "status" {
     $StatusArgs = @{}
@@ -82,6 +85,7 @@ switch ($Command) {
     Write-Host "  .\oceans.ps1 sync      Pull updates and check out pinned child repositories"
     Write-Host "  .\oceans.ps1 install   Install skills locally (default: codex)"
     Write-Host "  .\oceans.ps1 validate  Validate repository and skill structure"
+    Write-Host "  .\oceans.ps1 test      Run the platform test suite"
     Write-Host "  .\oceans.ps1 status    Show repository and runtime skill root status"
     Write-Host "  .\oceans.ps1 import    Scan local runtime skills and print an import review report"
     Write-Host ""

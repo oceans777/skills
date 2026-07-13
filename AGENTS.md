@@ -17,7 +17,10 @@ This repository is the entry point for the oceans777 skill system.
 
 Run this before committing script or repository layout changes:
 
-```powershell
-.\oceans.ps1 validate
-.\oceans.ps1 status
+```sh
+./oceans validate
+./oceans test
+./oceans status
 ```
+
+On Windows, run the equivalent `oceans.ps1` commands.

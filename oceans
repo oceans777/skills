@@ -17,6 +17,9 @@ case "$COMMAND" in
   validate)
     sh "$REPO_ROOT/scripts/validate-skills.sh"
     ;;
+  test)
+    sh "$REPO_ROOT/scripts/test.sh"
+    ;;
   status)
     sh "$REPO_ROOT/scripts/status.sh" "$@"
     ;;
@@ -36,6 +39,7 @@ case "$COMMAND" in
     echo "  ./oceans sync      Pull updates and check out pinned child repositories"
     echo "  ./oceans install   Install skills locally (default: codex)"
     echo "  ./oceans validate  Validate repository and skill structure"
+    echo "  ./oceans test      Run the platform test suite"
     echo "  ./oceans status    Show repository and runtime skill root status"
     echo "  ./oceans import    Scan local runtime skills and print an import review report"
     echo ""

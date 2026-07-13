@@ -4,6 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SANDBOX_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-import-test.XXXXXX")
+SANDBOX_ROOT=$(CDPATH= cd "$SANDBOX_ROOT" && pwd -P)
 LOCAL_SKILLS_ROOT=$SANDBOX_ROOT/local-skills
 FIRST_PARTY_ROOT=$SANDBOX_ROOT/repo/oceans-skills/skills
 COMMUNITY_ROOT=$SANDBOX_ROOT/repo/community-skills/skills

@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 PUBLISH_SCRIPT=$REPO_ROOT/scripts/publish-skills.sh
 SANDBOX_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-publish-test-XXXXXX")
+SANDBOX_ROOT=$(CDPATH= cd "$SANDBOX_ROOT" && pwd -P)
 
 assert_equal() {
   actual=$1
@@ -43,7 +44,7 @@ cleanup() {
     return
   fi
 
-  temp_root=$(CDPATH= cd "${TMPDIR:-/tmp}" && pwd)
+  temp_root=$(CDPATH= cd "${TMPDIR:-/tmp}" && pwd -P)
   sandbox_parent=$(CDPATH= cd "$(dirname "$SANDBOX_ROOT")" && pwd)
   sandbox_leaf=${SANDBOX_ROOT##*/}
   if [ "$sandbox_parent" != "$temp_root" ] || [ "${sandbox_leaf#oceans-publish-test-}" = "$sandbox_leaf" ]; then

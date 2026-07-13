@@ -68,6 +68,7 @@ Both approaches can result in all repositories being present locally. The setup 
 .\oceans.ps1 sync
 .\oceans.ps1 install
 .\oceans.ps1 validate
+.\oceans.ps1 test
 .\oceans.ps1 status
 .\oceans.ps1 import
 ```
@@ -78,6 +79,7 @@ Both approaches can result in all repositories being present locally. The setup 
 ./oceans sync
 ./oceans install
 ./oceans validate
+./oceans test
 ./oceans status
 ./oceans import
 ```
@@ -91,6 +93,8 @@ Normal users only need setup plus these commands. `import` is a report-only revi
 `install` installs skills into the local Codex skills directory by default. Use `-Runtime` / `--runtime` for a specific runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` for every existing known runtime root. Local unmanaged skills always win and are not overwritten by repository skills with the same name.
 
 `validate` checks skill structure, required files, and third-party attribution.
+
+`test` runs all platform-specific behavioral tests. Shell tests run through `scripts/test.sh`; PowerShell tests run through `scripts/test.ps1`. CI runs both suites across Ubuntu, macOS, and Windows.
 
 `status` prints repository state, submodule state, known runtime skill roots, and managed oceans777 skill counts. Use `-Runtime` / `--runtime` to inspect one runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` to show only roots that already exist.
 
