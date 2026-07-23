@@ -32,7 +32,10 @@ function Invoke-GitChecked {
 }
 
 function Write-Utf8NoBom {
-  param([Parameter(Mandatory = $true)][string] $Path, [Parameter(Mandatory = $true)][string[]] $Lines)
+  param(
+    [Parameter(Mandatory = $true)][string] $Path,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string[]] $Lines
+  )
   [System.IO.File]::WriteAllLines($Path, $Lines, (New-Object System.Text.UTF8Encoding($false)))
 }
 
