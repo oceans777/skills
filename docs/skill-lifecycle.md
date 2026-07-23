@@ -68,11 +68,10 @@ The intake command:
 5. clones without running upstream scripts and skips Git LFS smudging;
 6. enforces path containment, symlink rejection, strict metadata, secret scanning, file-count budget, and byte budget;
 7. preserves a community license and attribution;
-8. normalizes package permissions so directories are traversable and package files are non-executable;
-9. builds a deterministic SHA-256 fingerprint from sorted UTF-8 path bytes and each included file hash;
-10. stores that fingerprint in `candidate_content_sha256` beside the candidate provenance;
-11. writes only to the isolated review queue;
-12. never activates a candidate in the same command.
+8. builds a deterministic SHA-256 fingerprint from sorted UTF-8 path bytes and each included file hash;
+9. stores that fingerprint in `candidate_content_sha256` beside the candidate provenance;
+10. writes only to the isolated review queue;
+11. never activates a candidate in the same command.
 
 The local-repository intake path exists only for isolated regression fixtures and requires the explicit `OCEANS_TEST_MODE=1` environment variable. It is not exposed by the public command wrapper and must not be used as production provenance.
 
@@ -81,7 +80,7 @@ The local-repository intake path exists only for isolated regression fixtures an
 Approval does not trust the review directory merely because it exists. The activation command:
 
 1. validates metadata, paths, links, risk rules, and attribution;
-2. normalizes package permissions;
+2. normalizes package permissions so directories remain traversable and package files are non-executable;
 3. recalculates the review-directory fingerprint and compares it with `candidate_content_sha256`;
 4. copies through a sibling staging directory;
 5. recalculates the staged package before activation;
