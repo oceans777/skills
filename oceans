@@ -20,7 +20,7 @@ case "$COMMAND" in
     echo "oceans777 skills commands:"
     echo
     echo "Daily user commands:"
-    echo "  ./oceans sync      Pull updates and check out pinned child repositories"
+    echo "  ./oceans sync      Pull updates, update child repositories, and enforce lifecycle blocks"
     echo "  ./oceans install   Reconcile lifecycle state and install active skills"
     echo "  ./oceans validate  Validate repositories, catalog, and review candidates"
     echo "  ./oceans test      Run the platform test suite"
