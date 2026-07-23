@@ -38,9 +38,10 @@ try {
   New-Item -ItemType Directory -Force -Path $InstalledArchive | Out-Null
   Set-Content (Join-Path $InstalledArchive "SKILL.md") "managed-archive" -Encoding UTF8
   Set-Content (Join-Path $InstalledArchive ".oceans-skill-source") "source_repository=oceans-skills" -Encoding UTF8
-  $PrivateBlocked = Join-Path $Install "blocked-skill"
-  New-Item -ItemType Directory -Force -Path $PrivateBlocked | Out-Null
-  Set-Content (Join-Path $PrivateBlocked "SKILL.md") "private-blocked-copy" -Encoding UTF8
+  $InstalledBlocked = Join-Path $Install "blocked-skill"
+  New-Item -ItemType Directory -Force -Path $InstalledBlocked | Out-Null
+  Set-Content (Join-Path $InstalledBlocked "SKILL.md") "managed-blocked-copy" -Encoding UTF8
+  Set-Content (Join-Path $InstalledBlocked ".oceans-skill-source") "source_repository=oceans-skills" -Encoding UTF8
   $InstalledDeprecated = Join-Path $Install "deprecated-skill"
   New-Item -ItemType Directory -Force -Path $InstalledDeprecated | Out-Null
   Set-Content (Join-Path $InstalledDeprecated "SKILL.md") "installed-deprecated-version" -Encoding UTF8
@@ -50,22 +51,39 @@ try {
   $Output = (& (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog *>&1 | Out-String)
   if (-not (Test-Path (Join-Path $Install "active-skill\SKILL.md"))) { Fail "Active skill was not installed." }
   if (Test-Path $InstalledArchive) { Fail "Managed archived copy remained active." }
-  $Disabled = Join-Path $TestRoot "runtime\.oceans-disabled\skills\archived\archived-skill\SKILL.md"
-  if (-not (Test-Path $Disabled)) { Fail "Managed archived copy was not preserved." }
+  if (Test-Path $InstalledBlocked) { Fail "Managed blocked copy remained active." }
+  $DisabledArchive = Join-Path $TestRoot "runtime\.oceans-disabled\skills\archived\archived-skill\SKILL.md"
+  $DisabledBlocked = Join-Path $TestRoot "runtime\.oceans-disabled\skills\blocked\blocked-skill\SKILL.md"
+  if (-not (Test-Path $DisabledArchive)) { Fail "Managed archived copy was not preserved." }
+  if (-not (Test-Path $DisabledBlocked)) { Fail "Managed blocked copy was not preserved." }
   Assert-Contains $Output "Disabled managed archived skill: archived-skill"
-  Assert-FileContains (Join-Path $PrivateBlocked "SKILL.md") "private-blocked-copy"
-  Assert-Contains $Output "Skipped blocked skill: blocked-skill"
+  Assert-Contains $Output "Disabled managed blocked skill: blocked-skill"
   Assert-Contains $Output "Retained deprecated managed skill without updating: deprecated-skill"
   Assert-FileContains (Join-Path $InstalledDeprecated "SKILL.md") "installed-deprecated-version"
 
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") restore -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -Skill archived-skill | Out-Null
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") restore -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -InstallRoot $Install -Skill archived-skill | Out-Null
   $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $Catalog -SkillName "archived-skill"
   $Record = Get-OceansCatalogRecord -Path $RecordPath
   if ($Record.status -ne "active" -or $Record.status_reason -or $Record.replacement) { Fail "Restore kept stale lifecycle metadata." }
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") block -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -Skill archived-skill -Reason reblocked | Out-Null
+  Assert-FileContains (Join-Path $Install "archived-skill\SKILL.md") "version=archived"
+
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") block -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -InstallRoot $Install -Skill archived-skill -Reason reblocked | Out-Null
+  if (Test-Path (Join-Path $Install "archived-skill")) { Fail "Block did not immediately disable the managed runtime copy." }
   try { & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") restore -CatalogRoot $Catalog -Skill archived-skill | Out-Null; Fail "Blocked skill was restored through ordinary restore." } catch { }
   try { & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") unblock -CatalogRoot $Catalog -Skill archived-skill | Out-Null; Fail "Unblock succeeded without repair reason." } catch { }
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") unblock -CatalogRoot $Catalog -Skill archived-skill -Reason remediated | Out-Null
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") unblock -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -InstallRoot $Install -Skill archived-skill -Reason remediated | Out-Null
+  Assert-FileContains (Join-Path $Install "archived-skill\SKILL.md") "version=archived"
+
+  Remove-Item (Join-Path $Install "archived-skill\.oceans-skill-source") -Force
+  try {
+    & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") block -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -InstallRoot $Install -Skill archived-skill -Reason second-incident | Out-Null
+    Fail "Block incorrectly reported success for an unmanaged local copy."
+  } catch {
+    if ($_ -notmatch "runtime reconciliation failed" -and $_ -notmatch "blocked-unmanaged-conflict") { throw }
+  }
+  Assert-FileContains (Join-Path $Install "archived-skill\SKILL.md") "version=archived"
+  $Record = Get-OceansCatalogRecord -Path $RecordPath
+  if ($Record.status -ne "blocked") { Fail "Security state did not remain blocked after unmanaged runtime conflict." }
 
   $ReviewRoot = Join-Path $Catalog "review-queue\oceans-skills"
   Write-Skill $ReviewRoot "active-skill" "candidate" | Out-Null
