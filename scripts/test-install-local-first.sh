@@ -43,7 +43,7 @@ printf '%s\n' source_repository=community-skills > "$INSTALL_ROOT/source-mismatc
 OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" --install-root "$INSTALL_ROOT" --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" --without-catalog)
 assert_contains "$OUTPUT" "duplicate-local-wins: local-first-test"
 assert_contains "$OUTPUT" "Updated managed oceans777 skill: managed-update-test"
-assert_contains "$OUTPUT" "duplicate-unknown-marker: unknown-marker-test"
+assert_contains "$OUTPUT" "duplicate-local-wins: unknown-marker-test"
 assert_contains "$OUTPUT" "duplicate-managed-source-mismatch: source-mismatch-test"
 assert_file_contains "$INSTALL_ROOT/local-first-test/SKILL.md" local-version
 assert_file_contains "$INSTALL_ROOT/managed-update-test/SKILL.md" repo-version
