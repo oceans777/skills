@@ -11,6 +11,7 @@ SKILL_PATH=
 TARGET=community
 ACTIVATE=0
 ALLOW_RISK=0
+REPLACE_EXISTING=0
 DRY_RUN=0
 LOCAL_REPOSITORY=
 FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
@@ -29,6 +30,7 @@ while [ "$#" -gt 0 ]; do
     --target) need_value "$1" "${2:-}"; TARGET=$2; shift 2 ;;
     --activate) ACTIVATE=1; shift ;;
     --allow-risk) ALLOW_RISK=1; shift ;;
+    --replace-existing) REPLACE_EXISTING=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --local-repository) need_value "$1" "${2:-}"; LOCAL_REPOSITORY=$2; shift 2 ;;
     --first-party-root|--first-party-skills-root) need_value "$1" "${2:-}"; FIRST_PARTY_ROOT=$2; shift 2 ;;
@@ -87,7 +89,10 @@ CLONE_ROOT=$TEMP_ROOT/repository
 if [ -n "$LOCAL_REPOSITORY" ]; then
   [ -d "$LOCAL_REPOSITORY/.git" ] || { echo "--local-repository must point to a Git repository." >&2; exit 1; }
   git clone --quiet "$LOCAL_REPOSITORY" "$CLONE_ROOT"
-  if [ -n "$source_ref" ]; then git -C "$CLONE_ROOT" checkout --quiet "$source_ref"; fi
+  if [ -n "$source_ref" ]; then
+    resolved_ref=$(git -C "$CLONE_ROOT" rev-parse --verify "$source_ref^{commit}")
+    git -C "$CLONE_ROOT" checkout --quiet --detach "$resolved_ref"
+  fi
 else
   clone_url=https://github.com/$owner/$repo.git
   if [ -n "$source_ref" ]; then
@@ -133,9 +138,22 @@ oceans_valid_skill_name "$skill_name" || { echo "Invalid skill name: $skill_name
 metadata_issues=$(oceans_skill_metadata_issues "$source_skill" "$skill_name")
 [ -z "$metadata_issues" ] || { echo "Invalid skill metadata: $skill_name" >&2; printf '%s\n' "$metadata_issues" >&2; exit 1; }
 
-if state=$(oceans_catalog_state_for_skill "$CATALOG_ROOT" "$skill_name"); then
-  echo "Skill already exists in catalog state $state: $skill_name" >&2
-  exit 1
+existing_state=
+existing_record=
+if existing_state=$(oceans_catalog_state_for_skill "$CATALOG_ROOT" "$skill_name"); then
+  if [ "$REPLACE_EXISTING" -ne 1 ]; then
+    echo "Skill already exists in catalog state $existing_state: $skill_name" >&2
+    echo "Use --replace-existing for an intentional update." >&2
+    exit 1
+  fi
+  existing_record=$(oceans_catalog_record_path "$CATALOG_ROOT" "$existing_state" "$skill_name")
+  existing_repository=$(oceans_catalog_record_value "$existing_record" repository || true)
+  desired_repository=community-skills
+  [ "$TARGET" = oceans ] && desired_repository=oceans-skills
+  [ "$existing_repository" = "$desired_repository" ] || {
+    echo "Existing skill belongs to $existing_repository; refusing to move it across repositories." >&2
+    exit 1
+  }
 else
   catalog_status=$?
   [ "$catalog_status" -eq 1 ] || { echo "Skill exists in multiple catalog states: $skill_name" >&2; exit 1; }
@@ -178,9 +196,20 @@ PATCHES
   fi
 fi
 
+target_root=$COMMUNITY_ROOT
+[ "$TARGET" = oceans ] && target_root=$FIRST_PARTY_ROOT
+target_path=$target_root/$skill_name
+backup_path=
+if [ "$REPLACE_EXISTING" -eq 1 ] && [ -d "$target_path" ]; then
+  backup_path=$TEMP_ROOT/existing-skill-backup
+  mkdir -p "$backup_path"
+  cp -R "$target_path"/. "$backup_path"
+fi
+
 set -- --source-root "$PREPARED_ROOT" --skill "$skill_name" --target "$TARGET" \
   --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT"
 if [ "$ALLOW_RISK" -eq 1 ]; then set -- "$@" --allow-risk; fi
+if [ "$REPLACE_EXISTING" -eq 1 ]; then set -- "$@" --replace-existing; fi
 if [ "$DRY_RUN" -eq 1 ]; then set -- "$@" --dry-run; fi
 sh "$SCRIPT_DIR/stage-skill.sh" "$@"
 
@@ -194,13 +223,19 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-target_root=$COMMUNITY_ROOT
-[ "$TARGET" = oceans ] && target_root=$FIRST_PARTY_ROOT
 if ! oceans_catalog_write_record "$CATALOG_ROOT" "$state" "$skill_name" "$repository" \
   "$clean_url" "skills/$skill_name" "$source_ref" "$source_commit" "" ""; then
-  rm -rf "$target_root/$skill_name"
+  rm -rf "$target_path"
+  if [ -n "$backup_path" ]; then
+    mkdir -p "$target_path"
+    cp -R "$backup_path"/. "$target_path"
+  fi
   echo "Catalog registration failed; staged skill was rolled back: $skill_name" >&2
   exit 1
+fi
+if [ -n "$existing_record" ]; then
+  new_record=$(oceans_catalog_record_path "$CATALOG_ROOT" "$state" "$skill_name")
+  [ "$existing_record" = "$new_record" ] || rm -f "$existing_record"
 fi
 
 echo "added-skill: $skill_name"
