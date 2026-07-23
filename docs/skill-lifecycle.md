@@ -1,10 +1,27 @@
 # Skill lifecycle and URL intake
 
-## Principle
+## First principle
 
-The child repositories preserve skill files. The entry repository catalog decides whether a skill is installable. Archiving changes state; it does not delete history or silently remove a user's local copy.
+A published package, a review candidate, and a lifecycle decision are different facts. They must not overwrite one another.
 
-## Lifecycle commands
+- Child repositories contain the currently published packages.
+- `catalog/skills/<name>.skill` is the only lifecycle record for each skill.
+- `catalog/review-queue/<package-repository>/<name>/` contains an isolated candidate.
+- An active skill remains active while an update candidate is reviewed.
+- Approval promotes the candidate into the child repository and updates its provenance.
+- Rejection removes only the candidate and preserves the current package.
+
+## Lifecycle states
+
+- `active`: install and update the published package.
+- `pending-review`: a new skill has only a candidate and is not installable.
+- `deprecated`: retain existing managed copies, but do not install or update for new users.
+- `archived`: stop using the managed runtime copy and preserve it under `.oceans-disabled`.
+- `blocked`: immediately stop using the managed runtime copy because of a security, license, or integrity incident.
+
+The installer never moves an unmanaged local skill. Only directories with a valid `.oceans-skill-source` marker from `oceans-skills` or `community-skills` are reconciled.
+
+## State commands
 
 ```sh
 ./oceans catalog list
@@ -12,20 +29,14 @@ The child repositories preserve skill files. The entry repository catalog decide
 ./oceans catalog archive --skill old-skill --reason "Unsupported runtime"
 ./oceans catalog block --skill unsafe-skill --reason "License or security incident"
 ./oceans catalog restore --skill old-skill
+./oceans catalog unblock --skill unsafe-skill --reason "Incident remediated and reviewed"
 ```
 
-PowerShell uses the same model:
+`restore` is limited to `deprecated` and `archived`. A blocked skill requires the separate `unblock` action and a remediation reason.
 
-```powershell
-.\oceans.ps1 catalog -Action archive -Skill old-skill -Reason "Unsupported runtime"
-.\oceans.ps1 catalog -Action restore -Skill old-skill
-```
+## Add a candidate from GitHub
 
-Only `active` skills are installed. The installer reports every skipped state and never deletes a local skill automatically.
-
-## Add or update a skill from GitHub
-
-An administrator can submit a repository, skill directory, or `SKILL.md` URL:
+An administrator may submit a repository, skill directory, or `SKILL.md` URL:
 
 ```sh
 ./oceans add --url https://github.com/owner/repository/tree/main/path/to/skill
@@ -34,26 +45,51 @@ An administrator can submit a repository, skill directory, or `SKILL.md` URL:
 The intake command:
 
 1. accepts only HTTPS GitHub URLs;
-2. clones without executing upstream code;
-3. resolves exactly one `SKILL.md`;
-4. records the exact imported commit;
-5. preserves or requires a license for community skills;
-6. generates attribution and packaging notes when absent;
-7. runs the existing metadata, path, secret, binary, and symlink checks;
-8. stages the skill and registers it as `pending-review`.
+2. resolves slash-containing branch or tag names by longest matching reference;
+3. pins the exact imported commit;
+4. clones without running upstream scripts and skips Git LFS smudging;
+5. enforces path containment, symlink rejection, strict metadata, secret scanning, file-count budget, and byte budget;
+6. preserves a community license and attribution;
+7. writes only to the isolated review queue;
+8. never activates a candidate in the same command.
 
-After reviewing the staged files:
+Review and approve:
 
 ```sh
+./oceans validate
 ./oceans catalog activate --skill skill-name
 ./oceans validate
 ./oceans publish
 ```
 
-To update an existing skill from a newer upstream revision, repeat the intake with `--replace-existing` or `-ReplaceExisting`. The replacement is staged as `pending-review` unless the administrator also passes the explicit activation flag. Git history preserves the prior published version.
+Reject a candidate:
 
-Use `--activate` only when the administrator intentionally wants the imported skill immediately eligible for installation. A URL is an intake request, not a security bypass.
+```sh
+./oceans catalog reject --skill skill-name
+```
+
+For an existing active skill, queue a newer candidate without interrupting the current package:
+
+```sh
+./oceans add \
+  --url https://github.com/owner/repository/tree/release/v2/path/to/skill \
+  --replace-existing
+```
+
+Changing the upstream repository requires the additional `--allow-source-change` flag after a provenance review. Cross-package-repository migration remains blocked.
+
+## Publication order
+
+Publishing cannot be physically atomic across three Git repositories. The implementation therefore makes the user-visible entry repository the commit point:
+
+1. validate child worktrees and the catalog;
+2. prepare child commits locally;
+3. create one entry commit containing both submodule pointers and catalog changes;
+4. push child commits;
+5. push the entry commit last.
+
+If the final entry push fails, child commits may exist as unreferenced commits, but users remain on the previous coherent entry commit. Re-running `publish` completes the prepared release.
 
 ## State decisions
 
-Do not archive solely because a repository is old. Archive or deprecate when tests fail repeatedly, the runtime is incompatible, the upstream is abandoned and broken, a maintained replacement exists, or the administrator ends support. Use `blocked` for urgent security, license, or integrity failures.
+Do not archive solely because a repository is old. Archive or deprecate when tests repeatedly fail, the supported runtime is incompatible, upstream is abandoned and broken, a maintained replacement exists, or maintenance intentionally ends. Use `blocked` for urgent security, license, or integrity failures.
