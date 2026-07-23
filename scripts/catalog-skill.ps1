@@ -80,6 +80,16 @@ function Restore-PackageFromBackup {
   }
 }
 
+function Remove-ReviewHoldBestEffort {
+  param([Parameter(Mandatory = $true)][string] $ReviewHold)
+  if (-not (Test-Path -LiteralPath $ReviewHold)) { return }
+  try {
+    Remove-Item -LiteralPath $ReviewHold -Recurse -Force
+  } catch {
+    Write-Warning "Committed lifecycle state is valid, but temporary review hold could not be removed: $ReviewHold"
+  }
+}
+
 function Promote-Candidate {
   Load-Record
   if ($script:Status -notin @("pending-review", "active")) { throw "catalog-transition-not-allowed: $($script:Status) -> active" }
@@ -114,13 +124,14 @@ function Promote-Candidate {
       -UpstreamRef ([string]$script:Record["candidate_upstream_ref"]) `
       -UpstreamCommit ([string]$script:Record["candidate_upstream_commit"]) `
       -TransitionNote "activated reviewed candidate $($script:CandidateCommit)" | Out-Null
-    Remove-Item -LiteralPath $ReviewHold -Recurse -Force
   } catch {
     try { Restore-PackageFromBackup -TargetPath $TargetPath -BackupPath $BackupPath } catch { Write-Warning "CRITICAL: failed to restore package after activation failure: $Skill" }
     if (Test-Path -LiteralPath $ReviewHold -PathType Container) { Move-Item -LiteralPath $ReviewHold -Destination $ReviewPath }
     throw "Candidate activation failed and was rolled back: $Skill. $($_.Exception.Message)"
   }
 
+  # Package and catalog are the commit point. Hold cleanup cannot roll them back.
+  Remove-ReviewHoldBestEffort -ReviewHold $ReviewHold
   Write-Host "catalog-state: active"
   Write-Host "skill: $Skill"
   Write-Host "activated-commit: $($script:CandidateCommit)"
@@ -149,11 +160,13 @@ function Reject-Candidate {
         -TransitionNote "rejected candidate $($script:CandidateCommit)" | Out-Null
       Write-Host "catalog-state: $($script:Status)"
     }
-    Remove-Item -LiteralPath $ReviewHold -Recurse -Force
   } catch {
     if (Test-Path -LiteralPath $ReviewHold -PathType Container) { Move-Item -LiteralPath $ReviewHold -Destination $ReviewPath }
     throw "Candidate rejection failed and was rolled back: $Skill. $($_.Exception.Message)"
   }
+
+  # Record state is the commit point. Cleanup failure leaves only a removable hold.
+  Remove-ReviewHoldBestEffort -ReviewHold $ReviewHold
   Write-Host "catalog-candidate-rejected: $Skill"
 }
 
