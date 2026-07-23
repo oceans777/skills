@@ -16,6 +16,19 @@ oceans_sha256_file() {
   return 1
 }
 
+# Skill packages are text-only and are invoked through an explicit interpreter.
+# Canonical permissions remove executable-bit drift without making the package
+# fingerprint platform-dependent.
+oceans_normalize_skill_permissions() {
+  skill_path=$1
+  [ -d "$skill_path" ] && [ ! -L "$skill_path" ] || {
+    echo "Cannot normalize unsafe skill directory: $skill_path" >&2
+    return 1
+  }
+  find "$skill_path" -type d -exec chmod 755 {} + || return 1
+  find "$skill_path" -type f -exec chmod 644 {} + || return 1
+}
+
 oceans_skill_content_sha256() {
   skill_path=$1
   root=$(CDPATH= cd "$skill_path" && pwd -P) || return 1
