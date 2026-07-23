@@ -17,9 +17,11 @@ A published package, a review candidate, and a lifecycle decision are different 
 - `pending-review`: a new skill has only a candidate and is not installable.
 - `deprecated`: retain existing managed copies, but do not install or update for new users.
 - `archived`: stop using the managed runtime copy and preserve it under `.oceans-disabled`.
-- `blocked`: immediately stop using the managed runtime copy because of a security, license, or integrity incident.
+- `blocked`: stop using the managed runtime copy because of a security, license, or integrity incident.
 
-The installer never moves an unmanaged local skill. Only directories with a valid `.oceans-skill-source` marker from `oceans-skills` or `community-skills` are reconciled.
+A lifecycle transition is not considered locally enforced merely because the catalog file changed. `archive` and `block` reconcile all known existing runtime roots before the command returns. `sync` also reconciles lifecycle state after updating the entry repository and child repositories.
+
+The reconciler only moves a directory when it has a valid `.oceans-skill-source` marker from `oceans-skills` or `community-skills`. An unmanaged local directory is never deleted or moved automatically. When an unmanaged directory has the same name as a blocked skill, reconciliation fails closed, prints its exact path, and requires the operator to remove or rename it manually. The catalog remains blocked even when local reconciliation reports this conflict.
 
 ## State commands
 
@@ -32,7 +34,7 @@ The installer never moves an unmanaged local skill. Only directories with a vali
 ./oceans catalog unblock --skill unsafe-skill --reason "Incident remediated and reviewed"
 ```
 
-`restore` is limited to `deprecated` and `archived`. A blocked skill requires the separate `unblock` action and a remediation reason.
+`restore` is limited to `deprecated` and `archived`. A blocked skill requires the separate `unblock` action and a remediation reason. Restoring or unblocking reinstalls the active published package into existing managed runtime roots. Tests and controlled maintenance may pass an explicit install root; normal commands reconcile every known existing runtime root.
 
 ## Add a candidate from GitHub
 
@@ -44,14 +46,17 @@ An administrator may submit a repository, skill directory, or `SKILL.md` URL:
 
 The intake command:
 
-1. accepts only HTTPS GitHub URLs;
-2. resolves slash-containing branch or tag names by longest matching reference;
-3. pins the exact imported commit;
-4. clones without running upstream scripts and skips Git LFS smudging;
-5. enforces path containment, symlink rejection, strict metadata, secret scanning, file-count budget, and byte budget;
-6. preserves a community license and attribution;
-7. writes only to the isolated review queue;
-8. never activates a candidate in the same command.
+1. accepts only canonical HTTPS GitHub URLs;
+2. rejects percent-encoded or ambiguous path forms;
+3. resolves slash-containing branch or tag names by longest matching reference;
+4. pins the exact imported commit;
+5. clones without running upstream scripts and skips Git LFS smudging;
+6. enforces path containment, symlink rejection, strict metadata, secret scanning, file-count budget, and byte budget;
+7. preserves a community license and attribution;
+8. writes only to the isolated review queue;
+9. never activates a candidate in the same command.
+
+The local-repository intake path exists only for isolated regression fixtures and requires the explicit `OCEANS_TEST_MODE=1` environment variable. It is not exposed by the public command wrapper and must not be used as production provenance.
 
 Review and approve:
 
@@ -89,6 +94,10 @@ Publishing cannot be physically atomic across three Git repositories. The implem
 5. push the entry commit last.
 
 If the final entry push fails, child commits may exist as unreferenced commits, but users remain on the previous coherent entry commit. Re-running `publish` completes the prepared release.
+
+## Continuous integration
+
+Every behavioral test runs as an independently named job on its supported operating systems. Failure output is uploaded as a workflow artifact, so a red gate identifies the exact test rather than hiding it inside one aggregated platform job. A release is not acceptable until Ubuntu, macOS, Windows validation, and every behavioral test pass.
 
 ## State decisions
 
