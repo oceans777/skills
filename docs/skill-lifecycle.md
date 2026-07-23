@@ -23,7 +23,7 @@ PowerShell uses the same model:
 
 Only `active` skills are installed. The installer reports every skipped state and never deletes a local skill automatically.
 
-## Add a skill from GitHub
+## Add or update a skill from GitHub
 
 An administrator can submit a repository, skill directory, or `SKILL.md` URL:
 
@@ -49,6 +49,8 @@ After reviewing the staged files:
 ./oceans validate
 ./oceans publish
 ```
+
+To update an existing skill from a newer upstream revision, repeat the intake with `--replace-existing` or `-ReplaceExisting`. The replacement is staged as `pending-review` unless the administrator also passes the explicit activation flag. Git history preserves the prior published version.
 
 Use `--activate` only when the administrator intentionally wants the imported skill immediately eligible for installation. A URL is an intake request, not a security bypass.
 
