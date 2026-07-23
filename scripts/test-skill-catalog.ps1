@@ -5,47 +5,93 @@ $TestRoot = Join-Path ([System.IO.Path]::GetTempPath()) "oceans-catalog-test-$([
 $First = Join-Path $TestRoot "oceans\skills"
 $Community = Join-Path $TestRoot "community\skills"
 $Catalog = Join-Path $TestRoot "catalog"
-$Install = Join-Path $TestRoot "install"
+$Install = Join-Path $TestRoot "runtime\skills"
+$CommitA = "0123456789012345678901234567890123456789"
+$CommitB = "abcdefabcdefabcdefabcdefabcdefabcdefabcd"
 
-function Write-Utf8NoBom([string]$Path, [string[]]$Lines) {
-  [System.IO.Directory]::CreateDirectory((Split-Path -Parent $Path)) | Out-Null
-  [System.IO.File]::WriteAllLines($Path, $Lines, (New-Object System.Text.UTF8Encoding($false)))
+function Fail([string] $Message) { throw $Message }
+function Assert-Contains([string] $Text, [string] $Expected) { if (-not $Text.Contains($Expected)) { Fail "Expected output to contain: $Expected" } }
+function Assert-FileContains([string] $Path, [string] $Expected) { if (-not (Get-Content -LiteralPath $Path -Raw).Contains($Expected)) { Fail "Expected $Path to contain: $Expected" } }
+function Write-Skill([string] $Root, [string] $Name, [string] $Version) {
+  $Path = Join-Path $Root $Name
+  New-Item -ItemType Directory -Force -Path $Path | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $Path "SKILL.md"), "---`nname: $Name`ndescription: Catalog lifecycle fixture.`n---`nversion=$Version`n", (New-Object System.Text.UTF8Encoding($false)))
+  return $Path
 }
-function Write-TestSkill([string]$Root, [string]$Name) {
-  Write-Utf8NoBom (Join-Path $Root "$Name\SKILL.md") @("---", "name: $Name", "description: Catalog test skill.", "---")
-}
+function Invoke-Catalog([string[]] $Arguments) { & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") @Arguments }
 
 try {
-  foreach ($State in @("active", "pending-review", "deprecated", "archived", "blocked")) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $Catalog $State) | Out-Null
-  }
-  Write-TestSkill $First "active-skill"
-  Write-TestSkill $First "archived-skill"
-  Write-TestSkill $Community "pending-skill"
-  Write-Utf8NoBom (Join-Path $Community "pending-skill\UPSTREAM.md") @("upstream")
-  Write-Utf8NoBom (Join-Path $Community "pending-skill\PATCHES.md") @("patches")
-  Write-Utf8NoBom (Join-Path $Community "pending-skill\LICENSE") @("license")
-
+  New-Item -ItemType Directory -Force -Path $First, $Community, (Join-Path $Catalog "skills"), (Join-Path $Catalog "review-queue\oceans-skills"), (Join-Path $Catalog "review-queue\community-skills"), $Install | Out-Null
   . (Join-Path $RepoRoot "scripts\skill-catalog.ps1")
-  $Commit = "0123456789012345678901234567890123456789"
-  Write-OceansCatalogRecord -CatalogRoot $Catalog -State active -SkillName active-skill -Repository oceans-skills -SourceUrl https://github.com/example/oceans -SourcePath skills/active-skill -SourceRef main -SourceCommit $Commit | Out-Null
-  Write-OceansCatalogRecord -CatalogRoot $Catalog -State archived -SkillName archived-skill -Repository oceans-skills -SourceUrl https://github.com/example/oceans -SourcePath skills/archived-skill -SourceRef main -SourceCommit $Commit -Reason retired | Out-Null
-  Write-OceansCatalogRecord -CatalogRoot $Catalog -State pending-review -SkillName pending-skill -Repository community-skills -SourceUrl https://github.com/example/community -SourcePath skills/pending-skill -SourceRef main -SourceCommit $Commit | Out-Null
+  foreach ($Fixture in @(
+      @{ Name = "active-skill"; Status = "active"; Version = "old"; Reason = ""; Replacement = "" },
+      @{ Name = "archived-skill"; Status = "archived"; Version = "archived"; Reason = "retired"; Replacement = "active-skill" },
+      @{ Name = "blocked-skill"; Status = "blocked"; Version = "blocked"; Reason = "security-incident"; Replacement = "" },
+      @{ Name = "deprecated-skill"; Status = "deprecated"; Version = "deprecated"; Reason = "superseded"; Replacement = "active-skill" }
+    )) {
+    Write-Skill $First $Fixture.Name $Fixture.Version | Out-Null
+    Write-OceansCatalogRecord -CatalogRoot $Catalog -SkillName $Fixture.Name -Status $Fixture.Status -PackageRepository "oceans-skills" `
+      -UpstreamRepository "https://github.com/example/oceans" -UpstreamPath "skills/$($Fixture.Name)" -UpstreamRef "main" -UpstreamCommit $CommitA `
+      -Replacement $Fixture.Replacement -StatusReason $Fixture.Reason -TransitionNote "fixture $($Fixture.Status)" | Out-Null
+  }
+
+  $InstalledArchive = Join-Path $Install "archived-skill"
+  New-Item -ItemType Directory -Force -Path $InstalledArchive | Out-Null
+  Set-Content (Join-Path $InstalledArchive "SKILL.md") "managed-archive" -Encoding UTF8
+  Set-Content (Join-Path $InstalledArchive ".oceans-skill-source") "source_repository=oceans-skills" -Encoding UTF8
+  $PrivateBlocked = Join-Path $Install "blocked-skill"
+  New-Item -ItemType Directory -Force -Path $PrivateBlocked | Out-Null
+  Set-Content (Join-Path $PrivateBlocked "SKILL.md") "private-blocked-copy" -Encoding UTF8
 
   & (Join-Path $RepoRoot "scripts\validate-skills.ps1") -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog | Out-Null
   $Output = (& (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog *>&1 | Out-String)
-  if (-not (Test-Path -LiteralPath (Join-Path $Install "active-skill\SKILL.md") -PathType Leaf)) { throw "Active skill was not installed." }
-  if (Test-Path -LiteralPath (Join-Path $Install "archived-skill")) { throw "Archived skill must not be installed." }
-  if (Test-Path -LiteralPath (Join-Path $Install "pending-skill")) { throw "Pending skill must not be installed." }
-  if ($Output -notmatch 'Skipped archived skill: archived-skill') { throw "Archive skip was not reported." }
-  if ($Output -notmatch 'Skipped pending-review skill: pending-skill') { throw "Pending skip was not reported." }
+  if (-not (Test-Path (Join-Path $Install "active-skill\SKILL.md"))) { Fail "Active skill was not installed." }
+  if (Test-Path $InstalledArchive) { Fail "Managed archived copy remained active." }
+  $Disabled = Join-Path $TestRoot "runtime\.oceans-disabled\skills\archived\archived-skill\SKILL.md"
+  if (-not (Test-Path $Disabled)) { Fail "Managed archived copy was not preserved." }
+  Assert-Contains $Output "Disabled managed archived skill: archived-skill"
+  Assert-FileContains (Join-Path $PrivateBlocked "SKILL.md") "private-blocked-copy"
+  Assert-Contains $Output "Skipped blocked skill: blocked-skill"
 
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") -Action restore -CatalogRoot $Catalog -Skill archived-skill | Out-Null
-  if (-not (Test-Path -LiteralPath (Join-Path $Catalog "active\archived-skill.skill") -PathType Leaf)) { throw "Restore failed." }
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") -Action archive -CatalogRoot $Catalog -Skill archived-skill -Reason "retired again" | Out-Null
-  if (-not (Test-Path -LiteralPath (Join-Path $Catalog "archived\archived-skill.skill") -PathType Leaf)) { throw "Archive failed." }
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") restore -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -Skill archived-skill | Out-Null
+  $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $Catalog -SkillName "archived-skill"
+  $Record = Get-OceansCatalogRecord -Path $RecordPath
+  if ($Record.status -ne "active" -or $Record.status_reason -or $Record.replacement) { Fail "Restore kept stale lifecycle metadata." }
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") block -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -Skill archived-skill -Reason reblocked | Out-Null
+  try { & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") restore -CatalogRoot $Catalog -Skill archived-skill | Out-Null; Fail "Blocked skill was restored through ordinary restore." } catch { }
+  try { & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") unblock -CatalogRoot $Catalog -Skill archived-skill | Out-Null; Fail "Unblock succeeded without repair reason." } catch { }
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") unblock -CatalogRoot $Catalog -Skill archived-skill -Reason remediated | Out-Null
 
+  $ReviewRoot = Join-Path $Catalog "review-queue\oceans-skills"
+  Write-Skill $ReviewRoot "active-skill" "candidate" | Out-Null
+  Write-OceansCatalogRecord -CatalogRoot $Catalog -SkillName "active-skill" -Status "active" -PackageRepository "oceans-skills" `
+    -UpstreamRepository "https://github.com/example/oceans" -UpstreamPath "skills/active-skill" -UpstreamRef main -UpstreamCommit $CommitA `
+    -CandidateUpstreamRepository "https://github.com/example/upstream" -CandidateUpstreamPath skill -CandidateUpstreamRef main -CandidateUpstreamCommit $CommitB `
+    -TransitionNote "queued candidate" | Out-Null
+  & (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog | Out-Null
+  Assert-FileContains (Join-Path $Install "active-skill\SKILL.md") "version=old"
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") activate -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -Skill active-skill | Out-Null
+  Assert-FileContains (Join-Path $First "active-skill\SKILL.md") "version=candidate"
+  if (Test-Path (Join-Path $ReviewRoot "active-skill")) { Fail "Activated candidate remained in review queue." }
+  $Record = Get-OceansCatalogRecord -Path (Get-OceansCatalogRecordPath $Catalog "active-skill")
+  if ($Record.upstream_commit -ne $CommitB -or $Record.candidate_upstream_commit) { Fail "Candidate provenance promotion failed." }
+  & (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog | Out-Null
+  Assert-FileContains (Join-Path $Install "active-skill\SKILL.md") "version=candidate"
+
+  Write-Skill $ReviewRoot "pending-skill" "candidate" | Out-Null
+  Write-OceansCatalogRecord -CatalogRoot $Catalog -SkillName "pending-skill" -Status "pending-review" -PackageRepository "oceans-skills" `
+    -CandidateUpstreamRepository "https://github.com/example/upstream" -CandidateUpstreamPath skill -CandidateUpstreamRef main -CandidateUpstreamCommit $CommitB -TransitionNote "new candidate" | Out-Null
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") reject -CatalogRoot $Catalog -Skill pending-skill | Out-Null
+  if (Test-Path (Get-OceansCatalogRecordPath $Catalog "pending-skill")) { Fail "Rejected new skill record remains." }
+  if (Test-Path (Join-Path $ReviewRoot "pending-skill")) { Fail "Rejected new candidate remains." }
+
+  $RecordPath = Get-OceansCatalogRecordPath $Catalog "active-skill"
+  Copy-Item $RecordPath (Join-Path $TestRoot "record-backup")
+  Add-Content $RecordPath "unknown_field=value" -Encoding UTF8
+  try { & (Join-Path $RepoRoot "scripts\validate-skills.ps1") -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog | Out-Null; Fail "Unknown catalog field passed validation." } catch { if ($_ -notmatch "Validation failed") { throw } }
+  Copy-Item (Join-Path $TestRoot "record-backup") $RecordPath -Force
+  New-Item -ItemType Directory -Force -Path (Join-Path $Catalog ".locks\active-skill.lock") | Out-Null
+  try { & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") deprecate -CatalogRoot $Catalog -Skill active-skill -Reason locked | Out-Null; Fail "Concurrent mutation ignored lock." } catch { }
+  Remove-Item (Join-Path $Catalog ".locks\active-skill.lock") -Recurse -Force
   Write-Host "PowerShell skill catalog test passed."
-} finally {
-  if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
-}
+} finally { if (Test-Path $TestRoot) { Remove-Item $TestRoot -Recurse -Force } }
