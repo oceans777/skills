@@ -343,7 +343,7 @@ function Get-OceansCatalogValidationIssues {
         continue
       }
       $Record = Get-OceansCatalogRecord -Path $RecordPath
-      if ([string]$Record["package_repository"] -cne $PackageRepository) { $Issues.Add("Candidate repository mismatch for $SkillName: $([string]$Record['package_repository'])") }
+      if ([string]$Record["package_repository"] -cne $PackageRepository) { $Issues.Add("Candidate repository mismatch for ${SkillName}: $([string]$Record['package_repository'])") }
       if ([string]::IsNullOrWhiteSpace([string]$Record["candidate_upstream_commit"])) { $Issues.Add("Orphan candidate review content: $PackageRepository/$SkillName") }
     }
   }
