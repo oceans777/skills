@@ -6,12 +6,15 @@ REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 . "$SCRIPT_DIR/skill-publish-rules.sh"
 . "$SCRIPT_DIR/skill-catalog.sh"
 . "$SCRIPT_DIR/directory-transaction.sh"
+SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 
 ACTION=${1:-list}
 if [ "$#" -gt 0 ]; then shift; fi
 CATALOG_ROOT=$REPO_ROOT/catalog
 FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
+INSTALL_ROOT=
+SKIP_RUNTIME_RECONCILE=0
 SKILL=
 REASON=
 REPLACEMENT=
@@ -32,6 +35,8 @@ while [ "$#" -gt 0 ]; do
     --catalog-root) [ "$#" -ge 2 ] || { echo "--catalog-root needs a path." >&2; exit 2; }; CATALOG_ROOT=$2; shift 2 ;;
     --first-party-root|--first-party-skills-root) [ "$#" -ge 2 ] || { echo "$1 needs a path." >&2; exit 2; }; FIRST_PARTY_ROOT=$2; shift 2 ;;
     --community-root|--community-skills-root) [ "$#" -ge 2 ] || { echo "$1 needs a path." >&2; exit 2; }; COMMUNITY_ROOT=$2; shift 2 ;;
+    --install-root) [ "$#" -ge 2 ] || { echo "--install-root needs a path." >&2; exit 2; }; INSTALL_ROOT=$2; shift 2 ;;
+    --skip-runtime-reconcile) SKIP_RUNTIME_RECONCILE=1; shift ;;
     --skill) [ "$#" -ge 2 ] || { echo "--skill needs a value." >&2; exit 2; }; SKILL=$2; shift 2 ;;
     --reason) [ "$#" -ge 2 ] || { echo "--reason needs a value." >&2; exit 2; }; REASON=$2; shift 2 ;;
     --replacement) [ "$#" -ge 2 ] || { echo "--replacement needs a value." >&2; exit 2; }; REPLACEMENT=$2; shift 2 ;;
@@ -80,6 +85,32 @@ load_record() {
 acquire_skill_lock() {
   oceans_catalog_acquire_lock "$CATALOG_ROOT" "$SKILL"
   LOCK_HELD=1
+}
+
+reconcile_runtime() {
+  target_status=$1
+  if [ "$SKIP_RUNTIME_RECONCILE" -eq 1 ]; then
+    echo "runtime-reconcile: explicitly-skipped"
+    return
+  fi
+
+  set -- --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" --catalog-root "$CATALOG_ROOT"
+  if [ -n "$INSTALL_ROOT" ]; then
+    set -- "$@" --install-root "$INSTALL_ROOT"
+  else
+    existing_roots=$(list_existing_root_records)
+    if [ -z "$existing_roots" ]; then
+      echo "runtime-reconcile: no-existing-roots"
+      return
+    fi
+    set -- "$@" --all-existing-runtimes
+  fi
+  [ "$target_status" = active ] || set -- "$@" --reconcile-only
+
+  if ! sh "$SCRIPT_DIR/install-skills.sh" "$@"; then
+    echo "Lifecycle state was committed, but runtime reconciliation failed." >&2
+    exit 1
+  fi
 }
 
 validate_candidate() {
@@ -231,6 +262,7 @@ transition_status() {
   oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" "$target_status" "$PACKAGE_REPOSITORY" \
     "$UPSTREAM_REPOSITORY" "$UPSTREAM_PATH" "$UPSTREAM_REF" "$UPSTREAM_COMMIT" \
     "" "" "" "" "$replacement" "$status_reason" "$transition_note"
+  reconcile_runtime "$target_status"
   echo "catalog-state: $target_status"
   echo "skill: $SKILL"
 }
