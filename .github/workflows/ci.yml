@@ -22,14 +22,15 @@ jobs:
         run: ./oceans test
 
   powershell:
-    name: PowerShell catalog debug (windows-latest)
+    name: PowerShell (windows-latest)
     runs-on: windows-latest
     steps:
-      - name: Fetch and run catalog PowerShell test
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Validate skills
         shell: pwsh
-        run: |
-          git init -q $env:GITHUB_WORKSPACE
-          git -C $env:GITHUB_WORKSPACE remote add origin "https://github.com/$env:GITHUB_REPOSITORY.git"
-          git -C $env:GITHUB_WORKSPACE fetch -q --depth 1 origin $env:GITHUB_SHA
-          git -C $env:GITHUB_WORKSPACE checkout -q FETCH_HEAD
-          & "$env:GITHUB_WORKSPACE\scripts\test-skill-catalog.ps1"
+        run: .\oceans.ps1 validate
+      - name: Run PowerShell tests
+        shell: pwsh
+        run: .\oceans.ps1 test
