@@ -8,6 +8,8 @@ $Catalog = Join-Path $TestRoot "catalog"
 $Install = Join-Path $TestRoot "runtime\skills"
 $CommitA = "0123456789012345678901234567890123456789"
 $CommitB = "abcdefabcdefabcdefabcdefabcdefabcdefabcd"
+$OldRegistry = $env:OCEANS_RUNTIME_ROOTS_FILE
+$env:OCEANS_RUNTIME_ROOTS_FILE = Join-Path $TestRoot "runtime-roots"
 
 function Fail([string] $Message) { throw $Message }
 function Assert-Contains([string] $Text, [string] $Expected) { if (-not $Text.Contains($Expected)) { Fail "Expected output to contain: $Expected" } }
@@ -81,7 +83,7 @@ try {
     & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") block -CatalogRoot $Catalog -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -InstallRoot $Install -Skill archived-skill -Reason second-incident | Out-Null
     Fail "Block incorrectly reported success for an unmanaged local copy."
   } catch {
-    if ($_ -notmatch "runtime reconciliation failed" -and $_ -notmatch "blocked-unmanaged-conflict") { throw }
+    if ($_ -notmatch "one or more runtime roots were not reconciled" -and $_ -notmatch "runtime-reconcile-conflict") { throw }
   }
   Assert-FileContains (Join-Path $Install "archived-skill\SKILL.md") "version=archived"
   $Record = Get-OceansCatalogRecord -Path $RecordPath
@@ -140,4 +142,8 @@ try {
   try { & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") deprecate -CatalogRoot $Catalog -Skill active-skill -Reason locked | Out-Null; Fail "Concurrent mutation ignored lock." } catch { }
   Remove-Item (Join-Path $Catalog ".locks\active-skill.lock") -Recurse -Force
   Write-Host "PowerShell skill catalog test passed."
-} finally { if (Test-Path $TestRoot) { Remove-Item $TestRoot -Recurse -Force } }
+} finally {
+  if ($null -eq $OldRegistry) { Remove-Item Env:\OCEANS_RUNTIME_ROOTS_FILE -ErrorAction SilentlyContinue }
+  else { $env:OCEANS_RUNTIME_ROOTS_FILE = $OldRegistry }
+  if (Test-Path $TestRoot) { Remove-Item $TestRoot -Recurse -Force }
+}
