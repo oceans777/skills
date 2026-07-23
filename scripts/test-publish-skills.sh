@@ -3,416 +3,152 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
-PUBLISH_SCRIPT=$REPO_ROOT/scripts/publish-skills.sh
-SANDBOX_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-publish-test-XXXXXX")
-SANDBOX_ROOT=$(CDPATH= cd "$SANDBOX_ROOT" && pwd -P)
+PUBLISH=$REPO_ROOT/scripts/publish-skills.sh
+SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/oceans-publish-test.XXXXXX")
+cleanup() { rm -rf "$SANDBOX"; }
+trap cleanup EXIT HUP INT TERM
 
-assert_equal() {
-  actual=$1
-  expected=$2
-  message=$3
+fail() { echo "$*" >&2; exit 1; }
+assert_equal() { [ "$1" = "$2" ] || fail "$3 Expected '$2', got '$1'."; }
+assert_not_equal() { [ "$1" != "$2" ] || fail "$3 Value must differ from '$2'."; }
+gitq() { git "$@" >/dev/null 2>&1; }
 
-  if [ "$actual" != "$expected" ]; then
-    echo "$message Expected '$expected', got '$actual'." >&2
-    exit 1
-  fi
-}
-
-assert_not_equal() {
-  actual=$1
-  unexpected=$2
-  message=$3
-
-  if [ "$actual" = "$unexpected" ]; then
-    echo "$message Value should not be '$unexpected'." >&2
-    exit 1
-  fi
-}
-
-assert_git_clean() {
-  repo_path=$1
-  status=$(git -C "$repo_path" status --porcelain)
-  if [ -n "$status" ]; then
-    echo "Expected git repository to be clean: $repo_path" >&2
-    echo "$status" >&2
-    exit 1
-  fi
-}
-
-cleanup() {
-  if [ ! -d "$SANDBOX_ROOT" ]; then
-    return
-  fi
-
-  temp_root=$(CDPATH= cd "${TMPDIR:-/tmp}" && pwd -P)
-  sandbox_parent=$(CDPATH= cd "$(dirname "$SANDBOX_ROOT")" && pwd)
-  sandbox_leaf=${SANDBOX_ROOT##*/}
-  if [ "$sandbox_parent" != "$temp_root" ] || [ "${sandbox_leaf#oceans-publish-test-}" = "$sandbox_leaf" ]; then
-    echo "Unsafe cleanup target: $SANDBOX_ROOT" >&2
-    exit 1
-  fi
-
-  rm -rf "$SANDBOX_ROOT"
-}
-trap cleanup EXIT INT TERM
-
-git_run() {
-  repo_path=$1
-  shift
-
-  git -C "$repo_path" "$@"
-}
-
-git_quiet() {
-  repo_path=$1
-  shift
-
-  git -C "$repo_path" "$@" >/dev/null 2>&1
-}
-
-git_global_quiet() {
-  git "$@" >/dev/null 2>&1
-}
-
-init_bare_repository() {
-  bare_path=$1
-  seed_path=$2
-  kind=$3
-
-  mkdir -p "$(dirname "$bare_path")" "$seed_path"
-  git_global_quiet init "$seed_path"
-  git_quiet "$seed_path" checkout -q -B main
-  git_quiet "$seed_path" config user.email publish-test@example.invalid
-  git_quiet "$seed_path" config user.name "Publish Test"
-  git_quiet "$seed_path" config core.autocrlf false
-
-  if [ "$kind" = "entry" ]; then
-    printf '%s\n' "entry fixture" > "$seed_path/README.md"
+init_bare() {
+  bare=$1; seed=$2; kind=$3
+  mkdir -p "$(dirname "$bare")" "$seed"
+  gitq init "$seed"; gitq -C "$seed" checkout -B main
+  gitq -C "$seed" config user.email test@example.invalid; gitq -C "$seed" config user.name Test; gitq -C "$seed" config core.autocrlf false
+  if [ "$kind" = entry ]; then
+    printf '%s\n' entry > "$seed/README.md"
+    mkdir -p "$seed/catalog/skills" "$seed/catalog/review-queue/oceans-skills" "$seed/catalog/review-queue/community-skills"
+    : > "$seed/catalog/skills/.gitkeep"; : > "$seed/catalog/review-queue/oceans-skills/.gitkeep"; : > "$seed/catalog/review-queue/community-skills/.gitkeep"
   else
-    mkdir -p "$seed_path/skills"
-    : > "$seed_path/skills/.gitkeep"
+    mkdir -p "$seed/skills"; : > "$seed/skills/.gitkeep"
   fi
-
-  git_quiet "$seed_path" add .
-  git_quiet "$seed_path" commit -m initial
-  git_global_quiet init --bare "$bare_path"
-  git_quiet "$seed_path" remote add origin "$bare_path"
-  git_quiet "$seed_path" push -u origin main
-  git --git-dir="$bare_path" symbolic-ref HEAD refs/heads/main
+  gitq -C "$seed" add .; gitq -C "$seed" commit -m initial
+  gitq init --bare "$bare"; gitq -C "$seed" remote add origin "$bare"; gitq -C "$seed" push -u origin main
+  git --git-dir="$bare" symbolic-ref HEAD refs/heads/main
 }
 
 new_fixture() {
-  fixture_name=$1
+  name=$1
+  ROOT=$SANDBOX/$name; REMOTE=$ROOT/remote; SEED=$ROOT/seed; WORK=$ROOT/work
+  ENTRY_REMOTE=$REMOTE/entry.git; FIRST_REMOTE=$REMOTE/oceans.git; COMMUNITY_REMOTE=$REMOTE/community.git
+  init_bare "$ENTRY_REMOTE" "$SEED/entry" entry
+  init_bare "$FIRST_REMOTE" "$SEED/oceans" child
+  init_bare "$COMMUNITY_REMOTE" "$SEED/community" child
+  mkdir -p "$WORK"
+  gitq clone "$ENTRY_REMOTE" "$WORK/entry"
+  ENTRY=$WORK/entry
+  gitq -C "$ENTRY" config user.email test@example.invalid; gitq -C "$ENTRY" config user.name Test; gitq -C "$ENTRY" config core.autocrlf false
+  git -C "$ENTRY" -c protocol.file.allow=always submodule add -b main "$FIRST_REMOTE" repos/oceans-skills >/dev/null 2>&1
+  git -C "$ENTRY" -c protocol.file.allow=always submodule add -b main "$COMMUNITY_REMOTE" repos/community-skills >/dev/null 2>&1
+  gitq -C "$ENTRY" add .; gitq -C "$ENTRY" commit -m submodules; gitq -C "$ENTRY" push origin main
+  FIRST=$ENTRY/repos/oceans-skills; COMMUNITY=$ENTRY/repos/community-skills
+  for repo in "$FIRST" "$COMMUNITY"; do gitq -C "$repo" config user.email test@example.invalid; gitq -C "$repo" config user.name Test; gitq -C "$repo" config core.autocrlf false; done
+  ENTRY_BASE=$(git -C "$ENTRY" rev-parse HEAD)
+  FIRST_BASE=$(git -C "$FIRST" rev-parse HEAD)
+}
 
-  FIXTURE_ROOT=$SANDBOX_ROOT/$fixture_name
-  REMOTE_ROOT=$FIXTURE_ROOT/remote
-  WORK_ROOT=$FIXTURE_ROOT/work
-  SEED_ROOT=$FIXTURE_ROOT/seed
-  ENTRY_REMOTE=$REMOTE_ROOT/entry.git
-  FIRST_PARTY_REMOTE=$REMOTE_ROOT/oceans-skills.git
-  COMMUNITY_REMOTE=$REMOTE_ROOT/community-skills.git
-  ENTRY_REPO=$WORK_ROOT/entry
-
-  init_bare_repository "$ENTRY_REMOTE" "$SEED_ROOT/entry" entry
-  init_bare_repository "$FIRST_PARTY_REMOTE" "$SEED_ROOT/oceans-skills" skills
-  init_bare_repository "$COMMUNITY_REMOTE" "$SEED_ROOT/community-skills" skills
-
-  mkdir -p "$WORK_ROOT"
-  git_global_quiet clone "$ENTRY_REMOTE" "$ENTRY_REPO"
-  git_quiet "$ENTRY_REPO" config user.email publish-test@example.invalid
-  git_quiet "$ENTRY_REPO" config user.name "Publish Test"
-  git_quiet "$ENTRY_REPO" config core.autocrlf false
-  git_quiet "$ENTRY_REPO" reset --hard HEAD
-
-  git -C "$ENTRY_REPO" -c protocol.file.allow=always submodule add -b main "$FIRST_PARTY_REMOTE" repos/oceans-skills >/dev/null 2>&1
-  git -C "$ENTRY_REPO" -c protocol.file.allow=always submodule add -b main "$COMMUNITY_REMOTE" repos/community-skills >/dev/null 2>&1
-  git_quiet "$ENTRY_REPO" commit -m "add skill submodules"
-  git_quiet "$ENTRY_REPO" push origin main
-
-  FIRST_PARTY_REPO=$ENTRY_REPO/repos/oceans-skills
-  COMMUNITY_REPO=$ENTRY_REPO/repos/community-skills
-  for child_repo in "$FIRST_PARTY_REPO" "$COMMUNITY_REPO"; do
-    git_quiet "$child_repo" config user.email publish-test@example.invalid
-    git_quiet "$child_repo" config user.name "Publish Test"
-    git_quiet "$child_repo" config core.autocrlf false
-    git_quiet "$child_repo" reset --hard HEAD
-  done
-
-  assert_git_clean "$ENTRY_REPO"
-  assert_git_clean "$FIRST_PARTY_REPO"
-  assert_git_clean "$COMMUNITY_REPO"
+write_active_change() {
+  name=$1; version=$2
+  mkdir -p "$FIRST/skills/$name"
+  cat > "$FIRST/skills/$name/SKILL.md" <<EOF_SKILL
+---
+name: $name
+description: Publish fixture.
+---
+version=$version
+EOF_SKILL
+  cat > "$ENTRY/catalog/skills/$name.skill" <<EOF_RECORD
+schema_version=2
+name=$name
+status=active
+package_repository=oceans-skills
+upstream_repository=https://github.com/example/upstream
+upstream_path=skills/$name
+upstream_ref=main
+upstream_commit=0123456789012345678901234567890123456789
+candidate_upstream_repository=
+candidate_upstream_path=
+candidate_upstream_ref=
+candidate_upstream_commit=
+replacement=
+status_reason=
+transition_note=publish fixture
+updated_at=2026-07-23T00:00:00Z
+EOF_RECORD
 }
 
 run_publish() {
-  expected=$1
-  shift
-
-  if [ ! -f "$PUBLISH_SCRIPT" ]; then
-    echo "Missing publish script: $PUBLISH_SCRIPT" >&2
-    exit 1
-  fi
-
-  publish_env_home=$FIXTURE_ROOT/publish-env-home
-  mkdir -p "$publish_env_home/.config"
-
+  expected=$1; shift
+  home=$ROOT/home; mkdir -p "$home/.config"
   set +e
-  output=$(
-    cd "$ENTRY_REPO" && \
-    GIT_TERMINAL_PROMPT=0 \
-    HOME="$publish_env_home" \
-    USERPROFILE="$publish_env_home" \
-    XDG_CONFIG_HOME="$publish_env_home/.config" \
-    GIT_CONFIG_GLOBAL="$publish_env_home/.gitconfig" \
-    sh "$PUBLISH_SCRIPT" \
-      --repo-root "$ENTRY_REPO" \
-      --first-party-repo "$FIRST_PARTY_REPO" \
-      --community-repo "$COMMUNITY_REPO" \
-      "$@" 2>&1
-  )
-  status=$?
+  OUTPUT=$(cd "$ENTRY" && HOME="$home" USERPROFILE="$home" XDG_CONFIG_HOME="$home/.config" GIT_CONFIG_GLOBAL="$home/.gitconfig" GIT_TERMINAL_PROMPT=0 sh "$PUBLISH" --repo-root "$ENTRY" --first-party-repo "$FIRST" --community-repo "$COMMUNITY" "$@" 2>&1)
+  CODE=$?
   set -e
-
-  if [ "$expected" = "failure" ]; then
-    if [ "$status" -eq 0 ]; then
-      echo "Expected publish-skills.sh to fail. Output:" >&2
-      echo "$output" >&2
-      exit 1
-    fi
-  elif [ "$status" -ne 0 ]; then
-    echo "Expected publish-skills.sh to pass. Exit code: $status Output:" >&2
-    echo "$output" >&2
-    exit 1
-  fi
-
-  printf '%s' "$output"
+  if [ "$expected" = success ]; then [ "$CODE" -eq 0 ] || { echo "$OUTPUT" >&2; fail "Publish failed."; }
+  else [ "$CODE" -ne 0 ] || fail "Publish unexpectedly succeeded."; fi
 }
 
-run_publish_success() {
-  run_publish success "$@"
-}
+remote_head() { git --git-dir="$1" rev-parse refs/heads/main; }
+entry_pointer() { git --git-dir="$ENTRY_REMOTE" ls-tree refs/heads/main "$1" | awk '{print $3}'; }
+entry_has_path() { git --git-dir="$ENTRY_REMOTE" cat-file -e "refs/heads/main:$1" 2>/dev/null; }
 
-run_publish_failure() {
-  run_publish failure "$@"
-}
+# No changes is a no-op.
+new_fixture no-changes
+run_publish success
+assert_equal "$(git -C "$ENTRY" rev-parse HEAD)" "$ENTRY_BASE" "No-op changed entry."
+assert_equal "$(git -C "$FIRST" rev-parse HEAD)" "$FIRST_BASE" "No-op changed child."
+case "$OUTPUT" in *publish-no-changes*) ;; *) fail "No-op did not report publish-no-changes." ;; esac
 
-get_head() {
-  repo_path=$1
+# Child package and catalog are published behind one entry commit.
+new_fixture coherent-success
+write_active_change coherent-skill one
+run_publish success
+CHILD_HEAD=$(remote_head "$FIRST_REMOTE")
+ENTRY_HEAD=$(remote_head "$ENTRY_REMOTE")
+assert_not_equal "$CHILD_HEAD" "$FIRST_BASE" "Child was not published."
+assert_not_equal "$ENTRY_HEAD" "$ENTRY_BASE" "Entry was not published."
+assert_equal "$(entry_pointer repos/oceans-skills)" "$CHILD_HEAD" "Entry pointer does not reference child commit."
+entry_has_path catalog/skills/coherent-skill.skill || fail "Catalog record is missing from visible entry commit."
 
-  git_run "$repo_path" rev-parse HEAD
-}
+# If the final entry push fails, remote users remain on the old coherent entry state.
+new_fixture entry-push-failure
+write_active_change retry-skill one
+mkdir -p "$ENTRY_REMOTE/hooks"
+cat > "$ENTRY_REMOTE/hooks/pre-receive" <<'EOF_HOOK'
+#!/bin/sh
+exit 1
+EOF_HOOK
+chmod +x "$ENTRY_REMOTE/hooks/pre-receive"
+run_publish failure
+CHILD_AFTER_FAILURE=$(remote_head "$FIRST_REMOTE")
+ENTRY_AFTER_FAILURE=$(remote_head "$ENTRY_REMOTE")
+assert_not_equal "$CHILD_AFTER_FAILURE" "$FIRST_BASE" "Child commit should be pushed before final entry failure."
+assert_equal "$ENTRY_AFTER_FAILURE" "$ENTRY_BASE" "Entry main changed despite rejected final push."
+[ "$(entry_pointer repos/oceans-skills)" != "$CHILD_AFTER_FAILURE" ] || fail "Old entry unexpectedly references orphan child commit."
+if entry_has_path catalog/skills/retry-skill.skill; then fail "Catalog became visible without matching entry release."; fi
+rm -f "$ENTRY_REMOTE/hooks/pre-receive"
+run_publish success
+assert_equal "$(remote_head "$ENTRY_REMOTE")" "$(git -C "$ENTRY" rev-parse HEAD)" "Retry did not publish prepared entry commit."
+assert_equal "$(entry_pointer repos/oceans-skills)" "$CHILD_AFTER_FAILURE" "Retry entry pointer is wrong."
+entry_has_path catalog/skills/retry-skill.skill || fail "Retry did not publish catalog."
 
-get_remote_main() {
-  repo_path=$1
+# Invalid package/catalog pairing is rejected before any remote moves.
+new_fixture validation-failure
+mkdir -p "$FIRST/skills/orphan-skill"
+printf '%s\n' '---' 'name: orphan-skill' 'description: Orphan.' '---' > "$FIRST/skills/orphan-skill/SKILL.md"
+run_publish failure
+assert_equal "$(remote_head "$FIRST_REMOTE")" "$FIRST_BASE" "Validation failure pushed child."
+assert_equal "$(remote_head "$ENTRY_REMOTE")" "$ENTRY_BASE" "Validation failure pushed entry."
 
-  git_run "$repo_path" ls-remote origin refs/heads/main | awk '{print $1}'
-}
-
-get_submodule_pointer() {
-  entry_repo=$1
-  submodule_path=$2
-
-  git_run "$entry_repo" ls-tree HEAD "$submodule_path" | awk '{print $3}'
-}
-
-add_first_party_skill_change() {
-  skill_name=$1
-  stage_change=$2
-  skill_path=$FIRST_PARTY_REPO/skills/$skill_name
-
-  mkdir -p "$skill_path"
-  cat > "$skill_path/SKILL.md" <<EOF
----
-name: $skill_name
-description: Publish test skill.
----
-EOF
-
-  if [ "$stage_change" = "stage" ]; then
-    git_quiet "$FIRST_PARTY_REPO" add .
-  fi
-}
-
-add_community_skill_change() {
-  skill_name=$1
-  validity=$2
-  skill_path=$COMMUNITY_REPO/skills/$skill_name
-
-  mkdir -p "$skill_path"
-  cat > "$skill_path/SKILL.md" <<EOF
----
-name: $skill_name
-description: Community publish test skill.
----
-EOF
-
-  if [ "$validity" = "valid" ]; then
-    printf '%s\n' \
-      "Original repository: https://example.invalid/$skill_name" \
-      "Original author: Example" \
-      "License: MIT" > "$skill_path/UPSTREAM.md"
-    printf '%s\n' "No local patches." > "$skill_path/PATCHES.md"
-    printf '%s\n' "MIT test license" > "$skill_path/LICENSE"
-  fi
-}
-
-assert_published_child_and_entry() {
-  child_repo=$1
-  submodule_path=$2
-  old_child_head=$3
-  old_entry_head=$4
-
-  new_child_head=$(get_head "$child_repo")
-  new_entry_head=$(get_head "$ENTRY_REPO")
-  assert_not_equal "$new_child_head" "$old_child_head" "Expected child repository to receive a commit."
-  assert_not_equal "$new_entry_head" "$old_entry_head" "Expected entry repository to receive a submodule pointer commit."
-  assert_equal "$(get_remote_main "$child_repo")" "$new_child_head" "Expected child commit to be pushed."
-  assert_equal "$(get_remote_main "$ENTRY_REPO")" "$new_entry_head" "Expected entry commit to be pushed."
-  assert_equal "$(get_submodule_pointer "$ENTRY_REPO" "$submodule_path")" "$new_child_head" "Expected entry submodule pointer to reference child HEAD."
-  assert_git_clean "$child_repo"
-  assert_git_clean "$ENTRY_REPO"
-}
-
-assert_resumed_ahead_child_and_entry() {
-  child_repo=$1
-  submodule_path=$2
-  ahead_child_head=$3
-  old_entry_head=$4
-  output=$5
-
-  new_entry_head=$(get_head "$ENTRY_REPO")
-  assert_equal "$(get_head "$child_repo")" "$ahead_child_head" "Expected child HEAD to remain at the already-created commit."
-  assert_equal "$(get_remote_main "$child_repo")" "$ahead_child_head" "Expected interrupted child commit to be pushed on rerun."
-  assert_not_equal "$new_entry_head" "$old_entry_head" "Expected entry repository to receive a submodule pointer commit on rerun."
-  assert_equal "$(get_remote_main "$ENTRY_REPO")" "$new_entry_head" "Expected entry rerun commit to be pushed."
-  assert_equal "$(get_submodule_pointer "$ENTRY_REPO" "$submodule_path")" "$ahead_child_head" "Expected entry submodule pointer to reference ahead child HEAD."
-  case "$output" in
-    *publish-no-changes*)
-      echo "Interrupted publish rerun must not print publish-no-changes." >&2
-      exit 1
-      ;;
-  esac
-  assert_git_clean "$child_repo"
-  assert_git_clean "$ENTRY_REPO"
-}
-
-new_fixture no-child-changes
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-FIRST_PARTY_HEAD=$(get_head "$FIRST_PARTY_REPO")
-COMMUNITY_HEAD=$(get_head "$COMMUNITY_REPO")
-run_publish_success >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "No child changes should not commit entry."
-assert_equal "$(get_head "$FIRST_PARTY_REPO")" "$FIRST_PARTY_HEAD" "No child changes should not commit first-party repo."
-assert_equal "$(get_head "$COMMUNITY_REPO")" "$COMMUNITY_HEAD" "No child changes should not commit community repo."
-
-new_fixture first-party-child-change
-add_first_party_skill_change publish-ocean-skill unstage
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
-run_publish_success >/dev/null
-assert_published_child_and_entry "$FIRST_PARTY_REPO" repos/oceans-skills "$CHILD_HEAD" "$ENTRY_HEAD"
-
-new_fixture resume-ahead-first-party-child
-add_first_party_skill_change ahead-ocean-skill unstage
-git_quiet "$FIRST_PARTY_REPO" add skills
-git_quiet "$FIRST_PARTY_REPO" commit -m "skills: publish staged first-party skills"
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-AHEAD_CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
-CHILD_REMOTE_HEAD=$(get_remote_main "$FIRST_PARTY_REPO")
-assert_not_equal "$AHEAD_CHILD_HEAD" "$CHILD_REMOTE_HEAD" "Fixture should leave child repo ahead of origin/main."
-OUTPUT=$(run_publish_success)
-assert_resumed_ahead_child_and_entry "$FIRST_PARTY_REPO" repos/oceans-skills "$AHEAD_CHILD_HEAD" "$ENTRY_HEAD" "$OUTPUT"
-
-new_fixture community-child-change
-add_community_skill_change publish-community-skill valid
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$COMMUNITY_REPO")
-run_publish_success >/dev/null
-assert_published_child_and_entry "$COMMUNITY_REPO" repos/community-skills "$CHILD_HEAD" "$ENTRY_HEAD"
-
-new_fixture validate-failure
-add_community_skill_change invalid-community-skill invalid
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$COMMUNITY_REPO")
-run_publish_failure >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Validate failure should not commit entry."
-assert_equal "$(get_head "$COMMUNITY_REPO")" "$CHILD_HEAD" "Validate failure should not commit child."
-
-new_fixture empty-community-attribution-failure
-add_community_skill_change empty-community-skill invalid
-EMPTY_SKILL_PATH=$COMMUNITY_REPO/skills/empty-community-skill
-: > "$EMPTY_SKILL_PATH/UPSTREAM.md"
-printf '%s\n' "   " > "$EMPTY_SKILL_PATH/PATCHES.md"
-: > "$EMPTY_SKILL_PATH/LICENSE"
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$COMMUNITY_REPO")
-run_publish_failure >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Empty community attribution should not commit entry."
-assert_equal "$(get_head "$COMMUNITY_REPO")" "$CHILD_HEAD" "Empty community attribution should not commit child."
-
-new_fixture entry-dirty-outside-child-repos
-add_first_party_skill_change dirty-blocked-skill unstage
-printf '%s\n' "dirty entry file" > "$ENTRY_REPO/ENTRY-DIRTY.txt"
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
-run_publish_failure >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Dirty entry repo should not commit entry."
-assert_equal "$(get_head "$FIRST_PARTY_REPO")" "$CHILD_HEAD" "Dirty entry repo should not commit child."
-
-new_fixture ahead-child-outside-skills
-printf '%s\n' "unrelated child commit" > "$FIRST_PARTY_REPO/README.md"
-git_quiet "$FIRST_PARTY_REPO" add README.md
-git_quiet "$FIRST_PARTY_REPO" commit -m "docs: unrelated child change"
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
-CHILD_REMOTE_HEAD=$(get_remote_main "$FIRST_PARTY_REPO")
-run_publish_failure >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Ahead child outside skills should not commit entry."
-assert_equal "$(get_head "$FIRST_PARTY_REPO")" "$CHILD_HEAD" "Ahead child outside skills should keep local child commit."
-assert_equal "$(get_remote_main "$FIRST_PARTY_REPO")" "$CHILD_REMOTE_HEAD" "Ahead child outside skills should not push child commit."
-
-new_fixture ahead-entry-outside-submodules
-printf '%s\n' "unrelated entry commit" > "$ENTRY_REPO/ENTRY-AHEAD.txt"
-git_quiet "$ENTRY_REPO" add ENTRY-AHEAD.txt
-git_quiet "$ENTRY_REPO" commit -m "docs: unrelated entry change"
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-ENTRY_REMOTE_HEAD=$(get_remote_main "$ENTRY_REPO")
-run_publish_failure >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Ahead entry outside submodules should keep local entry commit."
-assert_equal "$(get_remote_main "$ENTRY_REPO")" "$ENTRY_REMOTE_HEAD" "Ahead entry outside submodules should not push entry commit."
-
-new_fixture only-child-staged-skill-changes
-add_first_party_skill_change staged-ocean-skill stage
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
-run_publish_success >/dev/null
-assert_published_child_and_entry "$FIRST_PARTY_REPO" repos/oceans-skills "$CHILD_HEAD" "$ENTRY_HEAD"
-
-new_fixture entry-behind-origin-main
-OTHER_ENTRY=$WORK_ROOT/other-entry
-git_global_quiet clone "$ENTRY_REMOTE" "$OTHER_ENTRY"
-git_quiet "$OTHER_ENTRY" config user.email publish-test@example.invalid
-git_quiet "$OTHER_ENTRY" config user.name "Publish Test"
-printf '%s\n' "remote main advanced" > "$OTHER_ENTRY/REMOTE-AHEAD.txt"
-git_quiet "$OTHER_ENTRY" add .
-git_quiet "$OTHER_ENTRY" commit -m "advance origin main"
-git_quiet "$OTHER_ENTRY" push origin main
-add_first_party_skill_change behind-blocked-skill unstage
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
-run_publish_failure >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Behind origin/main should not commit entry."
-assert_equal "$(get_head "$FIRST_PARTY_REPO")" "$CHILD_HEAD" "Behind origin/main should not commit child."
-
+# Dry-run reports order without creating commits.
 new_fixture dry-run
-add_first_party_skill_change dry-run-skill unstage
-ENTRY_HEAD=$(get_head "$ENTRY_REPO")
-CHILD_HEAD=$(get_head "$FIRST_PARTY_REPO")
-ENTRY_REMOTE_HEAD=$(get_remote_main "$ENTRY_REPO")
-CHILD_REMOTE_HEAD=$(get_remote_main "$FIRST_PARTY_REPO")
-run_publish_success --dry-run >/dev/null
-assert_equal "$(get_head "$ENTRY_REPO")" "$ENTRY_HEAD" "Dry run should not commit entry."
-assert_equal "$(get_head "$FIRST_PARTY_REPO")" "$CHILD_HEAD" "Dry run should not commit child."
-assert_equal "$(get_remote_main "$ENTRY_REPO")" "$ENTRY_REMOTE_HEAD" "Dry run should not push entry."
-assert_equal "$(get_remote_main "$FIRST_PARTY_REPO")" "$CHILD_REMOTE_HEAD" "Dry run should not push child."
+write_active_change dry-skill one
+run_publish success --dry-run
+assert_equal "$(git -C "$FIRST" rev-parse HEAD)" "$FIRST_BASE" "Dry-run committed child."
+assert_equal "$(git -C "$ENTRY" rev-parse HEAD)" "$ENTRY_BASE" "Dry-run committed entry."
+case "$OUTPUT" in *plan-push-entry-last*) ;; *) fail "Dry-run did not document entry-last order." ;; esac
 
-echo "Shell publish contract tests passed."
+echo "Shell publish skills test passed."
