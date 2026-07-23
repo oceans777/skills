@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("sync", "install", "validate", "test", "status", "import", "stage", "publish", "help")]
+  [ValidateSet("sync", "install", "validate", "test", "status", "import", "stage", "publish", "add", "catalog", "help")]
   [string] $Command = "help",
 
   [string] $SourceRoot,
@@ -10,87 +10,124 @@ param(
   [ValidateSet("oceans", "community")] [string] $Target,
   [switch] $AllowRisk,
   [switch] $ReplaceExisting,
+  [switch] $AllowSourceChange,
   [switch] $AllExistingRuntimes,
   [switch] $DryRun,
+  [switch] $WithoutCatalog,
   [string] $UpstreamUrl,
   [string] $UpstreamAuthor,
   [string] $UpstreamLicense,
   [string] $LicenseFile,
-  [string] $PatchSummary
+  [string] $PatchSummary,
+  [string] $Url,
+  [string] $SkillPath,
+  [string] $SourceRef,
+  [ValidateSet("list", "activate", "reject", "cancel-review", "restore", "unblock", "deprecate", "archive", "block")] [string] $Action = "list",
+  [string] $Reason,
+  [string] $Replacement,
+  [string] $LocalRepository,
+  [string] $CatalogRoot,
+  [string] $FirstPartySkillsRoot,
+  [string] $CommunitySkillsRoot
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 switch ($Command) {
-  "sync" {
-    & "$RepoRoot\scripts\sync.ps1"
-  }
+  "sync" { & "$RepoRoot\scripts\sync.ps1" }
   "install" {
-    $InstallArgs = @{}
-    if ($Runtime) { $InstallArgs.Runtime = $Runtime }
-    if ($AllExistingRuntimes) { $InstallArgs.AllExistingRuntimes = $true }
-    & "$RepoRoot\scripts\install-skills.ps1" @InstallArgs
+    $Args = @{}
+    if ($Runtime) { $Args.Runtime = $Runtime }
+    if ($AllExistingRuntimes) { $Args.AllExistingRuntimes = $true }
+    if ($CatalogRoot) { $Args.CatalogRoot = $CatalogRoot }
+    if ($FirstPartySkillsRoot) { $Args.FirstPartySkillsRoot = $FirstPartySkillsRoot }
+    if ($CommunitySkillsRoot) { $Args.CommunitySkillsRoot = $CommunitySkillsRoot }
+    if ($WithoutCatalog) { $Args.WithoutCatalog = $true }
+    & "$RepoRoot\scripts\install-skills.ps1" @Args
   }
   "validate" {
-    & "$RepoRoot\scripts\validate-skills.ps1"
+    $Args = @{}
+    if ($CatalogRoot) { $Args.CatalogRoot = $CatalogRoot }
+    if ($FirstPartySkillsRoot) { $Args.FirstPartySkillsRoot = $FirstPartySkillsRoot }
+    if ($CommunitySkillsRoot) { $Args.CommunitySkillsRoot = $CommunitySkillsRoot }
+    if ($WithoutCatalog) { $Args.WithoutCatalog = $true }
+    & "$RepoRoot\scripts\validate-skills.ps1" @Args
   }
-  "test" {
-    & "$RepoRoot\scripts\test.ps1"
-  }
+  "test" { & "$RepoRoot\scripts\test.ps1" }
   "status" {
-    $StatusArgs = @{}
-    if ($Runtime) { $StatusArgs.Runtime = $Runtime }
-    if ($AllExistingRuntimes) { $StatusArgs.AllExistingRuntimes = $true }
-    & "$RepoRoot\scripts\status.ps1" @StatusArgs
+    $Args = @{}
+    if ($Runtime) { $Args.Runtime = $Runtime }
+    if ($AllExistingRuntimes) { $Args.AllExistingRuntimes = $true }
+    & "$RepoRoot\scripts\status.ps1" @Args
   }
   "import" {
-    $ImportArgs = @{}
-    if ($SourceRoot) {
-      $ImportArgs.SourceRoot = $SourceRoot
-    }
-    if ($Runtime) {
-      $ImportArgs.Runtime = $Runtime
-    }
-    if ($Format) {
-      $ImportArgs.Format = $Format
-    }
-    & "$RepoRoot\scripts\import-skills.ps1" @ImportArgs
+    $Args = @{}
+    if ($SourceRoot) { $Args.SourceRoot = $SourceRoot }
+    if ($Runtime) { $Args.Runtime = $Runtime }
+    if ($Format) { $Args.Format = $Format }
+    & "$RepoRoot\scripts\import-skills.ps1" @Args
   }
   "stage" {
-    $StageArgs = @{}
-    if ($SourceRoot) { $StageArgs.SourceRoot = $SourceRoot }
-    if ($Runtime) { $StageArgs.Runtime = $Runtime }
-    if ($Skill) { $StageArgs.Skill = $Skill }
-    if ($Target) { $StageArgs.Target = $Target }
-    if ($AllowRisk) { $StageArgs.AllowRisk = $true }
-    if ($ReplaceExisting) { $StageArgs.ReplaceExisting = $true }
-    if ($DryRun) { $StageArgs.DryRun = $true }
-    if ($UpstreamUrl) { $StageArgs.UpstreamUrl = $UpstreamUrl }
-    if ($UpstreamAuthor) { $StageArgs.UpstreamAuthor = $UpstreamAuthor }
-    if ($UpstreamLicense) { $StageArgs.UpstreamLicense = $UpstreamLicense }
-    if ($LicenseFile) { $StageArgs.LicenseFile = $LicenseFile }
-    if ($PatchSummary) { $StageArgs.PatchSummary = $PatchSummary }
-    & "$RepoRoot\scripts\stage-skill.ps1" @StageArgs
+    $Args = @{}
+    if ($SourceRoot) { $Args.SourceRoot = $SourceRoot }
+    if ($Runtime) { $Args.Runtime = $Runtime }
+    if ($Skill) { $Args.Skill = $Skill }
+    if ($Target) { $Args.Target = $Target }
+    if ($AllowRisk) { $Args.AllowRisk = $true }
+    if ($ReplaceExisting) { $Args.ReplaceExisting = $true }
+    if ($DryRun) { $Args.DryRun = $true }
+    if ($UpstreamUrl) { $Args.UpstreamUrl = $UpstreamUrl }
+    if ($UpstreamAuthor) { $Args.UpstreamAuthor = $UpstreamAuthor }
+    if ($UpstreamLicense) { $Args.UpstreamLicense = $UpstreamLicense }
+    if ($LicenseFile) { $Args.LicenseFile = $LicenseFile }
+    if ($PatchSummary) { $Args.PatchSummary = $PatchSummary }
+    & "$RepoRoot\scripts\stage-skill.ps1" @Args
   }
   "publish" {
-    $PublishArgs = @{}
-    if ($DryRun) { $PublishArgs.DryRun = $true }
-    & "$RepoRoot\scripts\publish-skills.ps1" @PublishArgs
+    $Args = @{}
+    if ($DryRun) { $Args.DryRun = $true }
+    & "$RepoRoot\scripts\publish-skills.ps1" @Args
+  }
+  "add" {
+    if (-not $Url) { throw "-Url is required for add." }
+    $Args = @{ Url = $Url }
+    if ($SkillPath) { $Args.SkillPath = $SkillPath }
+    if ($SourceRef) { $Args.SourceRef = $SourceRef }
+    if ($Target) { $Args.Target = $Target }
+    if ($AllowRisk) { $Args.AllowRisk = $true }
+    if ($ReplaceExisting) { $Args.ReplaceExisting = $true }
+    if ($AllowSourceChange) { $Args.AllowSourceChange = $true }
+    if ($DryRun) { $Args.DryRun = $true }
+    if ($LocalRepository) { $Args.LocalRepository = $LocalRepository }
+    if ($CatalogRoot) { $Args.CatalogRoot = $CatalogRoot }
+    & "$RepoRoot\scripts\add-skill-from-url.ps1" @Args
+  }
+  "catalog" {
+    $Args = @{ Action = $Action }
+    if ($Skill) { $Args.Skill = $Skill }
+    if ($Reason) { $Args.Reason = $Reason }
+    if ($Replacement) { $Args.Replacement = $Replacement }
+    if ($CatalogRoot) { $Args.CatalogRoot = $CatalogRoot }
+    if ($FirstPartySkillsRoot) { $Args.FirstPartySkillsRoot = $FirstPartySkillsRoot }
+    if ($CommunitySkillsRoot) { $Args.CommunitySkillsRoot = $CommunitySkillsRoot }
+    & "$RepoRoot\scripts\catalog-skill.ps1" @Args
   }
   "help" {
     Write-Host "oceans777 skills commands:"
     Write-Host ""
     Write-Host "Daily user commands:"
     Write-Host "  .\oceans.ps1 sync      Pull updates and check out pinned child repositories"
-    Write-Host "  .\oceans.ps1 install   Install skills locally (default: codex)"
-    Write-Host "  .\oceans.ps1 validate  Validate repository and skill structure"
+    Write-Host "  .\oceans.ps1 install   Reconcile lifecycle state and install active skills"
+    Write-Host "  .\oceans.ps1 validate  Validate repositories, catalog, and review candidates"
     Write-Host "  .\oceans.ps1 test      Run the platform test suite"
     Write-Host "  .\oceans.ps1 status    Show repository and runtime skill root status"
     Write-Host "  .\oceans.ps1 import    Scan local runtime skills and print an import review report"
+    Write-Host "  .\oceans.ps1 catalog   List, approve, reject, or change lifecycle state"
     Write-Host ""
     Write-Host "Maintainer publishing commands:"
-    Write-Host "  .\oceans.ps1 stage     Stage one local skill into an oceans777 repository"
-    Write-Host "  .\oceans.ps1 publish   Validate, commit, and push staged skill repository changes"
+    Write-Host "  .\oceans.ps1 add       Queue one GitHub skill URL for isolated review"
+    Write-Host "  .\oceans.ps1 stage     Stage one trusted local skill into an oceans777 repository"
+    Write-Host "  .\oceans.ps1 publish   Publish child commits, catalog, and submodule pointers coherently"
   }
 }

@@ -1,0 +1,16 @@
+schema_version=2
+name=ui-ux-pro-max
+status=active
+package_repository=community-skills
+upstream_repository=https://github.com/oceans777/community-skills
+upstream_path=skills/ui-ux-pro-max
+upstream_ref=main
+upstream_commit=980669d3377c341551bc27cff14014677d360d29
+candidate_upstream_repository=
+candidate_upstream_path=
+candidate_upstream_ref=
+candidate_upstream_commit=
+replacement=
+status_reason=
+transition_note=initial catalog migration
+updated_at=2026-07-23T00:00:00Z
