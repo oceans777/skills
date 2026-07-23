@@ -45,12 +45,13 @@ write_record archived-skill archived "$COMMIT_A" retired active-skill
 write_record blocked-skill blocked "$COMMIT_A" security-incident
 write_record deprecated-skill deprecated "$COMMIT_A" superseded active-skill
 
-# Managed archived copies are disabled and preserved; private blocked copies are untouched.
+# Managed archived and blocked copies are disabled and preserved.
 mkdir -p "$INSTALL/archived-skill"
 printf '%s\n' managed-archive > "$INSTALL/archived-skill/SKILL.md"
 printf '%s\n' source_repository=oceans-skills > "$INSTALL/archived-skill/.oceans-skill-source"
 mkdir -p "$INSTALL/blocked-skill"
-printf '%s\n' private-blocked-copy > "$INSTALL/blocked-skill/SKILL.md"
+printf '%s\n' managed-blocked-copy > "$INSTALL/blocked-skill/SKILL.md"
+printf '%s\n' source_repository=oceans-skills > "$INSTALL/blocked-skill/.oceans-skill-source"
 # A managed deprecated copy remains active but must not receive repository updates.
 mkdir -p "$INSTALL/deprecated-skill"
 printf '%s\n' installed-deprecated-version > "$INSTALL/deprecated-skill/SKILL.md"
@@ -60,25 +61,39 @@ sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST" --communi
 OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" --install-root "$INSTALL" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG")
 [ -f "$INSTALL/active-skill/SKILL.md" ] || fail "Active skill was not installed."
 [ ! -e "$INSTALL/archived-skill" ] || fail "Managed archived copy remained active."
-DISABLED=$TEST_ROOT/runtime/.oceans-disabled/skills/archived/archived-skill
-[ -f "$DISABLED/SKILL.md" ] || fail "Managed archived copy was not preserved."
+[ ! -e "$INSTALL/blocked-skill" ] || fail "Managed blocked copy remained active."
+DISABLED_ARCHIVED=$TEST_ROOT/runtime/.oceans-disabled/skills/archived/archived-skill
+DISABLED_BLOCKED=$TEST_ROOT/runtime/.oceans-disabled/skills/blocked/blocked-skill
+[ -f "$DISABLED_ARCHIVED/SKILL.md" ] || fail "Managed archived copy was not preserved."
+[ -f "$DISABLED_BLOCKED/SKILL.md" ] || fail "Managed blocked copy was not preserved."
 assert_contains "$OUTPUT" "Disabled managed archived skill: archived-skill"
-assert_file_contains "$INSTALL/blocked-skill/SKILL.md" private-blocked-copy
-assert_contains "$OUTPUT" "Skipped blocked skill: blocked-skill"
+assert_contains "$OUTPUT" "Disabled managed blocked skill: blocked-skill"
 assert_contains "$OUTPUT" "Retained deprecated managed skill without updating: deprecated-skill"
 assert_file_contains "$INSTALL/deprecated-skill/SKILL.md" installed-deprecated-version
 
 # Restore is limited to deprecated/archived and clears stale lifecycle metadata.
-sh "$REPO_ROOT/scripts/catalog-skill.sh" restore --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill archived-skill >/dev/null
+sh "$REPO_ROOT/scripts/catalog-skill.sh" restore --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill >/dev/null
 RECORD=$(oceans_catalog_record_path "$CATALOG" archived-skill)
 [ "$(oceans_catalog_record_value "$RECORD" status)" = active ] || fail "Restore did not activate archived skill."
 [ -z "$(oceans_catalog_record_value "$RECORD" status_reason)" ] || fail "Restore kept stale status reason."
 [ -z "$(oceans_catalog_record_value "$RECORD" replacement)" ] || fail "Restore kept stale replacement."
+assert_file_contains "$INSTALL/archived-skill/SKILL.md" version=archived
 
-sh "$REPO_ROOT/scripts/catalog-skill.sh" block --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill archived-skill --reason reblocked >/dev/null
+sh "$REPO_ROOT/scripts/catalog-skill.sh" block --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill --reason reblocked >/dev/null
+[ ! -e "$INSTALL/archived-skill" ] || fail "Block did not immediately disable the managed runtime copy."
 if sh "$REPO_ROOT/scripts/catalog-skill.sh" restore --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill archived-skill >/dev/null 2>&1; then fail "Blocked skill was restored through ordinary restore."; fi
 if sh "$REPO_ROOT/scripts/catalog-skill.sh" unblock --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill archived-skill >/dev/null 2>&1; then fail "Unblock succeeded without repair reason."; fi
-sh "$REPO_ROOT/scripts/catalog-skill.sh" unblock --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill archived-skill --reason remediated >/dev/null
+sh "$REPO_ROOT/scripts/catalog-skill.sh" unblock --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill --reason remediated >/dev/null
+assert_file_contains "$INSTALL/archived-skill/SKILL.md" version=archived
+
+# A blocked unmanaged local copy is preserved, reported, and leaves the catalog blocked.
+rm -f "$INSTALL/archived-skill/.oceans-skill-source"
+if sh "$REPO_ROOT/scripts/catalog-skill.sh" block --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill --reason second-incident >"$TEST_ROOT/block-output" 2>"$TEST_ROOT/block-error"; then
+  fail "Block incorrectly reported success for an unmanaged local copy."
+fi
+assert_file_contains "$TEST_ROOT/block-error" "runtime reconciliation failed"
+assert_file_contains "$INSTALL/archived-skill/SKILL.md" version=archived
+[ "$(oceans_catalog_record_value "$RECORD" status)" = blocked ] || fail "Security state did not remain blocked after unmanaged runtime conflict."
 
 # Queue an update while the current active package remains available.
 REVIEW=$CATALOG/review-queue/oceans-skills/active-skill
