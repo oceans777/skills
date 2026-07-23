@@ -4,6 +4,7 @@ param(
   [ValidateSet("oceans", "community")][string] $Target = "community",
   [switch] $Activate,
   [switch] $AllowRisk,
+  [switch] $ReplaceExisting,
   [switch] $DryRun,
   [string] $LocalRepository,
   [string] $FirstPartySkillsRoot,
@@ -77,7 +78,10 @@ try {
       throw "-LocalRepository must point to a Git repository."
     }
     Invoke-GitChecked -Arguments @("clone", "--quiet", $LocalRepository, $CloneRoot) | Out-Null
-    if ($SourceRef) { Invoke-GitChecked -Arguments @("-C", $CloneRoot, "checkout", "--quiet", $SourceRef) | Out-Null }
+    if ($SourceRef) {
+      $ResolvedRef = ((Invoke-GitChecked -Arguments @("-C", $CloneRoot, "rev-parse", "--verify", "$SourceRef^{commit}")) -join '').Trim()
+      Invoke-GitChecked -Arguments @("-C", $CloneRoot, "checkout", "--quiet", "--detach", $ResolvedRef) | Out-Null
+    }
   } else {
     $CloneUrl = "https://github.com/$Owner/$Repository.git"
     $CloneArguments = @("clone", "--quiet", "--depth", "1")
@@ -118,7 +122,18 @@ try {
   if ($MetadataIssues.Count -gt 0) { throw "Invalid skill metadata: $SkillName`n$($MetadataIssues -join [Environment]::NewLine)" }
 
   $ExistingState = Get-OceansCatalogStateForSkill -CatalogRoot $CatalogRoot -SkillName $SkillName
-  if ($ExistingState) { throw "Skill already exists in catalog state ${ExistingState}: $SkillName" }
+  $ExistingRecordPath = $null
+  if ($ExistingState) {
+    if (-not $ReplaceExisting) {
+      throw "Skill already exists in catalog state ${ExistingState}: $SkillName. Use -ReplaceExisting for an intentional update."
+    }
+    $ExistingRecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -State $ExistingState -SkillName $SkillName
+    $ExistingRecord = Get-OceansCatalogRecord -Path $ExistingRecordPath
+    $DesiredRepository = if ($Target -eq "oceans") { "oceans-skills" } else { "community-skills" }
+    if ([string]$ExistingRecord["repository"] -cne $DesiredRepository) {
+      throw "Existing skill belongs to $([string]$ExistingRecord['repository']); refusing to move it across repositories."
+    }
+  }
 
   $PreparedRoot = Join-Path $TempRoot "prepared"
   $PreparedSkill = Join-Path $PreparedRoot $SkillName
@@ -155,6 +170,15 @@ try {
     }
   }
 
+  $TargetRoot = if ($Target -eq "oceans") { $FirstPartySkillsRoot } else { $CommunitySkillsRoot }
+  $TargetPath = Join-Path $TargetRoot $SkillName
+  $BackupPath = $null
+  if ($ReplaceExisting -and (Test-Path -LiteralPath $TargetPath -PathType Container)) {
+    $BackupPath = Join-Path $TempRoot "existing-skill-backup"
+    New-Item -ItemType Directory -Force -Path $BackupPath | Out-Null
+    Get-ChildItem -LiteralPath $TargetPath -Force | Copy-Item -Destination $BackupPath -Recurse -Force
+  }
+
   $StageArguments = @{
     SourceRoot = $PreparedRoot
     Skill = $SkillName
@@ -163,6 +187,7 @@ try {
     CommunitySkillsRoot = $CommunitySkillsRoot
   }
   if ($AllowRisk) { $StageArguments.AllowRisk = $true }
+  if ($ReplaceExisting) { $StageArguments.ReplaceExisting = $true }
   if ($DryRun) { $StageArguments.DryRun = $true }
   & (Join-Path $ScriptRoot "stage-skill.ps1") @StageArguments
 
@@ -174,15 +199,20 @@ try {
     exit 0
   }
 
-  $TargetRoot = if ($Target -eq "oceans") { $FirstPartySkillsRoot } else { $CommunitySkillsRoot }
   try {
-    Write-OceansCatalogRecord `
+    $NewRecordPath = Write-OceansCatalogRecord `
       -CatalogRoot $CatalogRoot -State $State -SkillName $SkillName -Repository $CatalogRepository `
       -SourceUrl ($Uri.GetLeftPart([UriPartial]::Path).TrimEnd('/')) -SourcePath "skills/$SkillName" `
-      -SourceRef $SourceRef -SourceCommit $SourceCommit | Out-Null
+      -SourceRef $SourceRef -SourceCommit $SourceCommit
+    if ($ExistingRecordPath -and -not $ExistingRecordPath.Equals($NewRecordPath, [StringComparison]::OrdinalIgnoreCase)) {
+      Remove-Item -LiteralPath $ExistingRecordPath -Force
+    }
   } catch {
-    $StagedTarget = Join-Path $TargetRoot $SkillName
-    if (Test-Path -LiteralPath $StagedTarget) { Remove-Item -LiteralPath $StagedTarget -Recurse -Force }
+    if (Test-Path -LiteralPath $TargetPath) { Remove-Item -LiteralPath $TargetPath -Recurse -Force }
+    if ($BackupPath) {
+      New-Item -ItemType Directory -Force -Path $TargetPath | Out-Null
+      Get-ChildItem -LiteralPath $BackupPath -Force | Copy-Item -Destination $TargetPath -Recurse -Force
+    }
     throw "Catalog registration failed; staged skill was rolled back: $SkillName. $($_.Exception.Message)"
   }
 
