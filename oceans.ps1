@@ -86,6 +86,7 @@ switch ($Command) {
     if ($Target) { $AddArgs.Target = $Target }
     if ($Activate) { $AddArgs.Activate = $true }
     if ($AllowRisk) { $AddArgs.AllowRisk = $true }
+    if ($ReplaceExisting) { $AddArgs.ReplaceExisting = $true }
     if ($DryRun) { $AddArgs.DryRun = $true }
     if ($LocalRepository) { $AddArgs.LocalRepository = $LocalRepository }
     if ($CatalogRoot) { $AddArgs.CatalogRoot = $CatalogRoot }
