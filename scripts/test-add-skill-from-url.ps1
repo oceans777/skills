@@ -8,6 +8,7 @@ $FirstRepo = Join-Path $TestRoot "oceans"
 $CommunityRepo = Join-Path $TestRoot "community"
 $Catalog = Join-Path $TestRoot "catalog"
 $Install = Join-Path $TestRoot "runtime\skills"
+$OldTestMode = $env:OCEANS_TEST_MODE
 
 function Invoke-Git([string[]] $Arguments) { $Output = & git @Arguments 2>&1; if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed.`n$($Output | Out-String)" } }
 function Init-Repo([string] $Path) {
@@ -26,6 +27,7 @@ function Assert-FileContains([string] $Path, [string] $Expected) { if (-not (Get
 function Expect-Failure([scriptblock] $Operation, [string] $Message) { try { & $Operation; throw $Message } catch { if ($_.Exception.Message -eq $Message) { throw } } }
 
 try {
+  $env:OCEANS_TEST_MODE = "1"
   Init-Repo $Upstream; Write-UpstreamSkill $Upstream "one"; Invoke-Git @("-C", $Upstream, "add", "."); Invoke-Git @("-C", $Upstream, "commit", "-q", "-m", "initial")
   Invoke-Git @("-C", $Upstream, "checkout", "-q", "-b", "feature/skill")
   Add-Content (Join-Path $Upstream "skills\sample-import\helper.txt") "branch-marker" -Encoding UTF8
@@ -71,4 +73,7 @@ try {
     Expect-Failure { & (Join-Path $RepoRoot "scripts\add-skill-from-url.ps1") -Url "https://github.com/example/upstream/tree/feature/skill/skills/sample-import" -LocalRepository $Upstream -Target community -CatalogRoot $Catalog -ReplaceExisting | Out-Null } "File budget overflow was accepted."
   } finally { if ($null -eq $OldBudget) { Remove-Item Env:\OCEANS_INTAKE_MAX_FILES -ErrorAction SilentlyContinue } else { $env:OCEANS_INTAKE_MAX_FILES = $OldBudget } }
   Write-Host "PowerShell URL intake test passed."
-} finally { if (Test-Path $TestRoot) { Remove-Item $TestRoot -Recurse -Force } }
+} finally {
+  if ($null -eq $OldTestMode) { Remove-Item Env:\OCEANS_TEST_MODE -ErrorAction SilentlyContinue } else { $env:OCEANS_TEST_MODE = $OldTestMode }
+  if (Test-Path $TestRoot) { Remove-Item $TestRoot -Recurse -Force }
+}
