@@ -22,6 +22,7 @@ if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
 $MaxFiles = if ($env:OCEANS_INTAKE_MAX_FILES) { [int]$env:OCEANS_INTAKE_MAX_FILES } else { 1000 }
 $MaxBytes = if ($env:OCEANS_INTAKE_MAX_BYTES) { [long]$env:OCEANS_INTAKE_MAX_BYTES } else { 20971520 }
 if ($MaxFiles -le 0 -or $MaxBytes -le 0) { throw "Intake budgets must be positive integers." }
+if ($LocalRepository -and $env:OCEANS_TEST_MODE -ne "1") { throw "-LocalRepository is test-only and requires OCEANS_TEST_MODE=1." }
 $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "oceans-skill-intake-$([Guid]::NewGuid().ToString('N'))"
 $CloneRoot = Join-Path $TempRoot "repository"
 $LockHeld = $false
