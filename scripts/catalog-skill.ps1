@@ -18,7 +18,7 @@ $RepoRoot = Split-Path -Parent $ScriptRoot
 . (Join-Path $ScriptRoot "skill-publish-rules.ps1")
 . (Join-Path $ScriptRoot "skill-catalog.ps1")
 . (Join-Path $ScriptRoot "directory-transaction.ps1")
-. (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
+. (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly -InstallRoot $InstallRoot
 
 if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
 if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills" }
