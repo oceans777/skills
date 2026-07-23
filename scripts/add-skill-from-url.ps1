@@ -1,14 +1,13 @@
 param(
   [Parameter(Mandatory = $true)][string] $Url,
   [string] $SkillPath,
+  [string] $SourceRef,
   [ValidateSet("oceans", "community")][string] $Target = "community",
-  [switch] $Activate,
   [switch] $AllowRisk,
   [switch] $ReplaceExisting,
+  [switch] $AllowSourceChange,
   [switch] $DryRun,
   [string] $LocalRepository,
-  [string] $FirstPartySkillsRoot,
-  [string] $CommunitySkillsRoot,
   [string] $CatalogRoot
 )
 
@@ -17,17 +16,21 @@ $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptRoot
 . (Join-Path $ScriptRoot "skill-publish-rules.ps1")
 . (Join-Path $ScriptRoot "skill-catalog.ps1")
+. (Join-Path $ScriptRoot "directory-transaction.ps1")
 
-if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills" }
-if (-not $CommunitySkillsRoot) { $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills" }
 if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
+$MaxFiles = if ($env:OCEANS_INTAKE_MAX_FILES) { [int]$env:OCEANS_INTAKE_MAX_FILES } else { 1000 }
+$MaxBytes = if ($env:OCEANS_INTAKE_MAX_BYTES) { [long]$env:OCEANS_INTAKE_MAX_BYTES } else { 20971520 }
+if ($MaxFiles -le 0 -or $MaxBytes -le 0) { throw "Intake budgets must be positive integers." }
+$TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "oceans-skill-intake-$([Guid]::NewGuid().ToString('N'))"
+$CloneRoot = Join-Path $TempRoot "repository"
+$LockHeld = $false
+New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 
 function Invoke-GitChecked {
   param([Parameter(Mandatory = $true)][string[]] $Arguments)
   $Output = & git @Arguments 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    throw "git $($Arguments -join ' ') failed.`n$($Output | Out-String)"
-  }
+  if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed.`n$($Output | Out-String)" }
   return @($Output)
 }
 
@@ -39,70 +42,102 @@ function Write-Utf8NoBom {
   [System.IO.File]::WriteAllLines($Path, $Lines, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-$Uri = [Uri]$Url
-if ($Uri.Scheme -ne "https" -or $Uri.Host -ne "github.com") {
-  throw "Only https://github.com skill URLs are supported."
-}
-$Segments = @($Uri.AbsolutePath.Trim('/') -split '/')
-if ($Segments.Count -lt 2) { throw "Invalid GitHub repository URL." }
-$Owner = $Segments[0]
-$Repository = $Segments[1] -replace '\.git$', ''
-$SourceRef = ""
-$UrlSkillPath = ""
-if ($Segments.Count -gt 2) {
-  switch ($Segments[2]) {
-    "tree" {
-      if ($Segments.Count -lt 4) { throw "GitHub tree URL is missing a ref." }
-      $SourceRef = $Segments[3]
-      if ($Segments.Count -gt 4) { $UrlSkillPath = ($Segments[4..($Segments.Count - 1)] -join '/') }
-    }
-    "blob" {
-      if ($Segments.Count -lt 5) { throw "GitHub blob URL is missing a file path." }
-      $SourceRef = $Segments[3]
-      $BlobPath = ($Segments[4..($Segments.Count - 1)] -join '/')
-      if ($BlobPath -eq "SKILL.md") { $UrlSkillPath = "" }
-      elseif ($BlobPath.EndsWith('/SKILL.md')) { $UrlSkillPath = $BlobPath.Substring(0, $BlobPath.Length - '/SKILL.md'.Length) }
-      else { throw "Blob URL must point to SKILL.md." }
-    }
-    default { throw "Unsupported GitHub URL shape. Use a repository, tree directory, or SKILL.md blob URL." }
+function Get-AvailableSourceRefs {
+  if ($LocalRepository) {
+    return @(Invoke-GitChecked -Arguments @("-C", $LocalRepository, "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/tags"))
   }
-}
-if ($SkillPath) { $UrlSkillPath = $SkillPath.Replace('\', '/') }
-if ([System.IO.Path]::IsPathRooted($UrlSkillPath) -or ($UrlSkillPath -split '/') -contains '..') {
-  throw "Unsafe skill path: $UrlSkillPath"
+  $Lines = @(Invoke-GitChecked -Arguments @("ls-remote", "--heads", "--tags", $script:CloneUrl))
+  $Refs = New-Object System.Collections.Generic.List[string]
+  foreach ($Line in $Lines) {
+    if ($Line -match '\srefs/(?:heads|tags)/(.+?)(?:\^\{\})?$') {
+      $Value = $Matches[1]
+      if (-not $Refs.Contains($Value)) { $Refs.Add($Value) }
+    }
+  }
+  return @($Refs)
 }
 
-$TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "oceans-skill-intake-$([Guid]::NewGuid().ToString('N'))"
-$CloneRoot = Join-Path $TempRoot "repository"
-New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 try {
-  if ($LocalRepository) {
-    if (-not (Test-Path -LiteralPath (Join-Path $LocalRepository '.git') -PathType Container)) {
-      throw "-LocalRepository must point to a Git repository."
+  $Uri = [Uri]$Url
+  if ($Uri.Scheme -ne "https" -or $Uri.Host -ne "github.com") { throw "Only https://github.com skill URLs are supported." }
+  $Segments = @($Uri.AbsolutePath.Trim('/') -split '/')
+  if ($Segments.Count -lt 2) { throw "Invalid GitHub repository URL." }
+  $Owner = $Segments[0]
+  $Repository = $Segments[1] -replace '\.git$', ''
+  if ($Owner -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$') { throw "Invalid GitHub owner: $Owner" }
+  if ($Repository -notmatch '^[A-Za-z0-9._-]{1,100}$') { throw "Invalid GitHub repository: $Repository" }
+  $UpstreamRepository = "https://github.com/$Owner/$Repository"
+  $script:CloneUrl = "$UpstreamRepository.git"
+  $UrlKind = "repository"
+  $RefAndPath = ""
+  if ($Segments.Count -gt 2) {
+    switch ($Segments[2]) {
+      "tree" {
+        if ($Segments.Count -lt 4) { throw "GitHub tree URL is missing a ref." }
+        $UrlKind = "tree"
+        $RefAndPath = ($Segments[3..($Segments.Count - 1)] -join '/')
+      }
+      "blob" {
+        if ($Segments.Count -lt 5) { throw "GitHub blob URL is missing a ref and file path." }
+        $UrlKind = "blob"
+        $RefAndPath = ($Segments[3..($Segments.Count - 1)] -join '/')
+      }
+      default { throw "Unsupported GitHub URL shape. Use a repository, tree directory, or SKILL.md blob URL." }
     }
-    Invoke-GitChecked -Arguments @("clone", "--quiet", $LocalRepository, $CloneRoot) | Out-Null
-    if ($SourceRef) {
-      $ResolvedRef = ((Invoke-GitChecked -Arguments @("-C", $CloneRoot, "rev-parse", "--verify", "$SourceRef^{commit}")) -join '').Trim()
-      Invoke-GitChecked -Arguments @("-C", $CloneRoot, "checkout", "--quiet", "--detach", $ResolvedRef) | Out-Null
+  }
+
+  $ResolvedSourceRef = $SourceRef
+  $UrlSkillPath = ""
+  if ($UrlKind -ne "repository") {
+    if (-not $ResolvedSourceRef) {
+      $BestRef = ""
+      foreach ($CandidateRef in @(Get-AvailableSourceRefs)) {
+        if ($RefAndPath -eq $CandidateRef -or $RefAndPath.StartsWith("$CandidateRef/", [StringComparison]::Ordinal)) {
+          if ($CandidateRef.Length -gt $BestRef.Length) { $BestRef = $CandidateRef }
+        }
+      }
+      $ResolvedSourceRef = if ($BestRef) { $BestRef } else { ($RefAndPath -split '/', 2)[0] }
+    }
+    if ($RefAndPath -ne $ResolvedSourceRef) { $UrlSkillPath = $RefAndPath.Substring($ResolvedSourceRef.Length + 1) }
+  }
+  if ($UrlKind -eq "blob") {
+    if ($UrlSkillPath -eq "SKILL.md") { $UrlSkillPath = "" }
+    elseif ($UrlSkillPath.EndsWith('/SKILL.md')) { $UrlSkillPath = $UrlSkillPath.Substring(0, $UrlSkillPath.Length - '/SKILL.md'.Length) }
+    else { throw "Blob URL must point to SKILL.md." }
+  }
+  if ($SkillPath) { $UrlSkillPath = $SkillPath.Replace('\', '/') }
+  if ([System.IO.Path]::IsPathRooted($UrlSkillPath) -or $UrlSkillPath.Contains('\') -or (($UrlSkillPath -split '/') -contains '..')) { throw "Unsafe skill path: $UrlSkillPath" }
+
+  if ($LocalRepository) {
+    if (-not (Test-Path -LiteralPath (Join-Path $LocalRepository '.git') -PathType Container)) { throw "-LocalRepository must point to a Git repository." }
+    $env:GIT_LFS_SKIP_SMUDGE = "1"
+    Invoke-GitChecked -Arguments @("clone", "--quiet", "--filter=blob:none", "--no-checkout", $LocalRepository, $CloneRoot) | Out-Null
+    if ($ResolvedSourceRef) {
+      $ResolvedCommit = ((Invoke-GitChecked -Arguments @("-C", $LocalRepository, "rev-parse", "--verify", "$ResolvedSourceRef^{commit}")) -join '').Trim()
+      Invoke-GitChecked -Arguments @("-C", $CloneRoot, "checkout", "--quiet", "--detach", $ResolvedCommit) | Out-Null
+    } else {
+      Invoke-GitChecked -Arguments @("-C", $CloneRoot, "checkout", "--quiet") | Out-Null
     }
   } else {
-    $CloneUrl = "https://github.com/$Owner/$Repository.git"
-    $CloneArguments = @("clone", "--quiet", "--depth", "1")
-    if ($SourceRef) { $CloneArguments += @("--branch", $SourceRef) }
-    $CloneArguments += @($CloneUrl, $CloneRoot)
-    Invoke-GitChecked -Arguments $CloneArguments | Out-Null
+    $env:GIT_LFS_SKIP_SMUDGE = "1"
+    if ($ResolvedSourceRef) {
+      Invoke-GitChecked -Arguments @("clone", "--quiet", "--filter=blob:none", "--no-checkout", $script:CloneUrl, $CloneRoot) | Out-Null
+      Invoke-GitChecked -Arguments @("-C", $CloneRoot, "fetch", "--quiet", "--depth", "1", "origin", $ResolvedSourceRef) | Out-Null
+      Invoke-GitChecked -Arguments @("-C", $CloneRoot, "checkout", "--quiet", "--detach", "FETCH_HEAD") | Out-Null
+    } else {
+      Invoke-GitChecked -Arguments @("clone", "--quiet", "--depth", "1", "--filter=blob:none", $script:CloneUrl, $CloneRoot) | Out-Null
+    }
   }
 
   $SourceCommit = ((Invoke-GitChecked -Arguments @("-C", $CloneRoot, "rev-parse", "HEAD")) -join '').Trim()
-  if (-not $SourceRef) {
-    $SourceRef = ((Invoke-GitChecked -Arguments @("-C", $CloneRoot, "rev-parse", "--abbrev-ref", "HEAD")) -join '').Trim()
+  if (-not $ResolvedSourceRef) {
+    $ResolvedSourceRef = ((& git -C $CloneRoot symbolic-ref --quiet --short HEAD 2>$null | Out-String).Trim())
+    if (-not $ResolvedSourceRef) { $ResolvedSourceRef = $SourceCommit }
   }
 
   if ($UrlSkillPath) {
     $SourceSkill = Join-Path $CloneRoot ($UrlSkillPath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
-    if (-not (Test-Path -LiteralPath (Join-Path $SourceSkill 'SKILL.md') -PathType Leaf)) {
-      throw "The selected path does not contain SKILL.md: $UrlSkillPath"
-    }
+    if (-not (Test-Path -LiteralPath (Join-Path $SourceSkill 'SKILL.md') -PathType Leaf)) { throw "The selected path does not contain SKILL.md: $UrlSkillPath" }
   } elseif (Test-Path -LiteralPath (Join-Path $CloneRoot 'SKILL.md') -PathType Leaf) {
     $SourceSkill = $CloneRoot
     $UrlSkillPath = "."
@@ -117,33 +152,36 @@ try {
     $UrlSkillPath = $SourceSkill.Substring($CloneRoot.Length).TrimStart('\', '/').Replace('\', '/')
   }
 
+  $SourceSkillItem = Get-Item -LiteralPath $SourceSkill -Force
+  if (($SourceSkillItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { throw "Selected skill path is a symlink." }
+  $SourceSkill = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $SourceSkill).Path)
+  $ResolvedCloneRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $CloneRoot).Path)
+  $ClonePrefix = $ResolvedCloneRoot.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+  if ($SourceSkill -ne $ResolvedCloneRoot -and -not $SourceSkill.StartsWith($ClonePrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Selected skill escapes the cloned repository." }
+
   $Frontmatter = Get-OceansSkillFrontmatter -SkillPath $SourceSkill
   $SkillName = Get-OceansSkillFrontmatterValue -Frontmatter $Frontmatter -Key "name"
   if (-not $SkillName) { throw "The selected SKILL.md has no name." }
   if (-not (Test-OceansSkillName -Name $SkillName)) { throw "Invalid skill name: $SkillName" }
   $MetadataIssues = @(Get-OceansSkillMetadataIssues -SkillPath $SourceSkill -ExpectedName $SkillName)
   if ($MetadataIssues.Count -gt 0) { throw "Invalid skill metadata: $SkillName`n$($MetadataIssues -join [Environment]::NewLine)" }
+  $PathIssues = @(Get-OceansSkillPathIssues -SkillPath $SourceSkill)
+  if ($PathIssues.Count -gt 0) { throw "Unsafe skill paths: $SkillName`n$($PathIssues -join [Environment]::NewLine)" }
 
-  $ExistingState = Get-OceansCatalogStateForSkill -CatalogRoot $CatalogRoot -SkillName $SkillName
-  $ExistingRecordPath = $null
-  if ($ExistingState) {
-    if (-not $ReplaceExisting) {
-      throw "Skill already exists in catalog state ${ExistingState}: $SkillName. Use -ReplaceExisting for an intentional update."
-    }
-    $ExistingRecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -State $ExistingState -SkillName $SkillName
-    $ExistingRecord = Get-OceansCatalogRecord -Path $ExistingRecordPath
-    $DesiredRepository = if ($Target -eq "oceans") { "oceans-skills" } else { "community-skills" }
-    if ([string]$ExistingRecord["repository"] -cne $DesiredRepository) {
-      throw "Existing skill belongs to $([string]$ExistingRecord['repository']); refusing to move it across repositories."
-    }
+  $IncludedFiles = @(Get-OceansIncludedSkillFiles -SkillPath $SourceSkill)
+  if ($IncludedFiles.Count -gt $MaxFiles) { throw "Skill exceeds intake file budget: $($IncludedFiles.Count) > $MaxFiles" }
+  $TotalBytes = [long]0
+  foreach ($File in $IncludedFiles) {
+    $TotalBytes += [long]$File.Length
+    if ($TotalBytes -gt $MaxBytes) { throw "Skill exceeds intake size budget: $TotalBytes > $MaxBytes" }
   }
 
   $PreparedRoot = Join-Path $TempRoot "prepared"
   $PreparedSkill = Join-Path $PreparedRoot $SkillName
   New-Item -ItemType Directory -Force -Path $PreparedSkill | Out-Null
   Get-ChildItem -LiteralPath $SourceSkill -Force | Copy-Item -Destination $PreparedSkill -Recurse -Force
-  $PreparedGit = Join-Path $PreparedSkill '.git'
-  if (Test-Path -LiteralPath $PreparedGit) { Remove-Item -LiteralPath $PreparedGit -Recurse -Force }
+  Remove-OceansExcludedPaths -RootPath $PreparedSkill
+  $PackageRepository = if ($Target -eq "oceans") { "oceans-skills" } else { "community-skills" }
 
   if ($Target -eq "community") {
     $PreparedLicense = Join-Path $PreparedSkill "LICENSE"
@@ -159,9 +197,8 @@ try {
     $UpstreamPath = Join-Path $PreparedSkill "UPSTREAM.md"
     if (-not (Test-Path -LiteralPath $UpstreamPath -PathType Leaf) -or (Get-Item $UpstreamPath).Length -eq 0) {
       Write-Utf8NoBom -Path $UpstreamPath -Lines @(
-        "# Upstream", "", "- Repository: https://github.com/$Owner/$Repository",
-        "- Submitted URL: $($Uri.GetLeftPart([UriPartial]::Path).TrimEnd('/'))", "- Author or owner: $Owner",
-        "- Imported commit: $SourceCommit", "- Imported path: $UrlSkillPath", "- License: preserved in LICENSE"
+        "# Upstream", "", "- Repository: $UpstreamRepository", "- Submitted URL: $($Uri.GetLeftPart([UriPartial]::Path).TrimEnd('/'))",
+        "- Author or owner: $Owner", "- Imported commit: $SourceCommit", "- Imported path: $UrlSkillPath", "- License: preserved in LICENSE"
       )
     }
     $PatchesPath = Join-Path $PreparedSkill "PATCHES.md"
@@ -173,60 +210,83 @@ try {
     }
   }
 
-  $TargetRoot = if ($Target -eq "oceans") { $FirstPartySkillsRoot } else { $CommunitySkillsRoot }
-  $TargetPath = Join-Path $TargetRoot $SkillName
-  $BackupPath = $null
-  if ($ReplaceExisting -and (Test-Path -LiteralPath $TargetPath -PathType Container)) {
-    $BackupPath = Join-Path $TempRoot "existing-skill-backup"
-    New-Item -ItemType Directory -Force -Path $BackupPath | Out-Null
-    Get-ChildItem -LiteralPath $TargetPath -Force | Copy-Item -Destination $BackupPath -Recurse -Force
+  $Links = @(Get-OceansSkillItemsNoFollow -SkillPath $PreparedSkill | Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 })
+  if ($Links.Count -gt 0) { throw "Candidate contains unsupported symlinks: $SkillName" }
+  $Risks = @(Get-OceansSkillRiskNotes -SkillPath $PreparedSkill)
+  if ($Risks.Count -gt 0 -and -not $AllowRisk) { throw "risk-blocked: $SkillName`n$($Risks -join [Environment]::NewLine)" }
+
+  $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $SkillName
+  if ((Test-Path -LiteralPath $RecordPath -PathType Leaf) -and -not $ReplaceExisting) {
+    $ExistingRecord = Get-OceansCatalogRecord -Path $RecordPath
+    throw "Skill already exists in catalog state $([string]$ExistingRecord['status']): $SkillName. Use -ReplaceExisting for an intentional candidate update."
   }
 
-  $StageArguments = @{
-    SourceRoot = $PreparedRoot
-    Skill = $SkillName
-    Target = $Target
-    FirstPartySkillsRoot = $FirstPartySkillsRoot
-    CommunitySkillsRoot = $CommunitySkillsRoot
-  }
-  if ($AllowRisk) { $StageArguments.AllowRisk = $true }
-  if ($ReplaceExisting) { $StageArguments.ReplaceExisting = $true }
-  if ($DryRun) { $StageArguments.DryRun = $true }
-  & (Join-Path $ScriptRoot "stage-skill.ps1") @StageArguments
-
-  $State = if ($Activate) { "active" } else { "pending-review" }
-  $CatalogRepository = if ($Target -eq "oceans") { "oceans-skills" } else { "community-skills" }
   if ($DryRun) {
-    Write-Host "catalog-plan-state: $State"
-    Write-Host "catalog-plan-skill: $SkillName"
+    Write-Host "candidate-plan-skill: $SkillName"
+    Write-Host "candidate-plan-repository: $PackageRepository"
+    Write-Host "candidate-plan-source: $UpstreamRepository@$SourceCommit"
+    Write-Host "candidate-plan-files: $($IncludedFiles.Count)"
+    Write-Host "candidate-plan-bytes: $TotalBytes"
     exit 0
   }
 
-  try {
-    $NewRecordPath = Write-OceansCatalogRecord `
-      -CatalogRoot $CatalogRoot -State $State -SkillName $SkillName -Repository $CatalogRepository `
-      -SourceUrl ($Uri.GetLeftPart([UriPartial]::Path).TrimEnd('/')) -SourcePath "skills/$SkillName" `
-      -SourceRef $SourceRef -SourceCommit $SourceCommit
-    if ($ExistingRecordPath -and -not $ExistingRecordPath.Equals($NewRecordPath, [StringComparison]::OrdinalIgnoreCase)) {
-      Remove-Item -LiteralPath $ExistingRecordPath -Force
+  Enter-OceansCatalogLock -CatalogRoot $CatalogRoot -SkillName $SkillName
+  $LockHeld = $true
+  $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $SkillName
+  $Existing = Test-Path -LiteralPath $RecordPath -PathType Leaf
+  if ($Existing) {
+    if (-not $ReplaceExisting) { throw "Skill was added concurrently: $SkillName" }
+    $ExistingRecord = Get-OceansCatalogRecord -Path $RecordPath
+    $CurrentStatus = [string]$ExistingRecord["status"]
+    if ($CurrentStatus -notin @("active", "pending-review")) { throw "Restore or unblock $SkillName before queuing an update from $CurrentStatus." }
+    if ([string]$ExistingRecord["package_repository"] -cne $PackageRepository) { throw "Existing skill belongs to $([string]$ExistingRecord['package_repository']); refusing cross-repository migration." }
+    $CurrentUpstreamRepository = [string]$ExistingRecord["upstream_repository"]
+    if ($CurrentUpstreamRepository -and $CurrentUpstreamRepository -cne $UpstreamRepository -and -not $AllowSourceChange) {
+      throw "Upstream repository changed from $CurrentUpstreamRepository to $UpstreamRepository. Use -AllowSourceChange only after an explicit provenance review."
     }
-  } catch {
-    if (Test-Path -LiteralPath $TargetPath) { Remove-Item -LiteralPath $TargetPath -Recurse -Force }
-    if ($BackupPath) {
-      New-Item -ItemType Directory -Force -Path $TargetPath | Out-Null
-      Get-ChildItem -LiteralPath $BackupPath -Force | Copy-Item -Destination $TargetPath -Recurse -Force
-    }
-    throw "Catalog registration failed; staged skill was rolled back: $SkillName. $($_.Exception.Message)"
+  } else {
+    $CurrentStatus = "pending-review"
+    $ExistingRecord = @{}
   }
 
-  Write-Host "added-skill: $SkillName"
-  Write-Host "catalog-state: $State"
-  Write-Host "source-commit: $SourceCommit"
-  if ($State -eq "pending-review") {
-    Write-Host "next: review files, then run .\oceans.ps1 catalog -Action activate -Skill $SkillName"
-  } else {
-    Write-Host "next: run .\oceans.ps1 validate, then .\oceans.ps1 publish"
+  $ReviewPath = Get-OceansCatalogReviewPath -CatalogRoot $CatalogRoot -PackageRepository $PackageRepository -SkillName $SkillName
+  $BackupPath = Join-Path $TempRoot "review-backup"
+  if (Test-Path -LiteralPath $ReviewPath -PathType Container) {
+    New-Item -ItemType Directory -Force -Path $BackupPath | Out-Null
+    Get-ChildItem -LiteralPath $ReviewPath -Force | Copy-Item -Destination $BackupPath -Recurse -Force
   }
+  $StagingPath = New-OceansStagingDirectory -TargetPath $ReviewPath
+  Get-ChildItem -LiteralPath $PreparedSkill -Force | Copy-Item -Destination $StagingPath -Recurse -Force
+  Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $ReviewPath
+
+  try {
+    Write-OceansCatalogRecord `
+      -CatalogRoot $CatalogRoot -SkillName $SkillName -Status $CurrentStatus -PackageRepository $PackageRepository `
+      -UpstreamRepository ([string]$ExistingRecord["upstream_repository"]) `
+      -UpstreamPath ([string]$ExistingRecord["upstream_path"]) `
+      -UpstreamRef ([string]$ExistingRecord["upstream_ref"]) `
+      -UpstreamCommit ([string]$ExistingRecord["upstream_commit"]) `
+      -CandidateUpstreamRepository $UpstreamRepository -CandidateUpstreamPath $UrlSkillPath `
+      -CandidateUpstreamRef $ResolvedSourceRef -CandidateUpstreamCommit $SourceCommit `
+      -Replacement ([string]$ExistingRecord["replacement"]) -StatusReason ([string]$ExistingRecord["status_reason"]) `
+      -TransitionNote "queued candidate $SourceCommit" | Out-Null
+  } catch {
+    if (Test-Path -LiteralPath $BackupPath -PathType Container) {
+      $RestoreStage = New-OceansStagingDirectory -TargetPath $ReviewPath
+      Get-ChildItem -LiteralPath $BackupPath -Force | Copy-Item -Destination $RestoreStage -Recurse -Force
+      Complete-OceansDirectoryTransaction -StagingPath $RestoreStage -TargetPath $ReviewPath
+    } elseif (Test-Path -LiteralPath $ReviewPath) {
+      Remove-Item -LiteralPath $ReviewPath -Recurse -Force
+    }
+    throw "Catalog candidate registration failed and was rolled back: $SkillName. $($_.Exception.Message)"
+  }
+
+  Write-Host "candidate-added: $SkillName"
+  Write-Host "catalog-state: $CurrentStatus"
+  Write-Host "candidate-commit: $SourceCommit"
+  if ($Existing) { Write-Host "active-package-preserved: $SkillName" }
+  Write-Host "next: review catalog/review-queue/$PackageRepository/$SkillName, then run .\oceans.ps1 catalog -Action activate -Skill $SkillName"
 } finally {
+  if ($LockHeld) { Exit-OceansCatalogLock }
   if (Test-Path -LiteralPath $TempRoot) { Remove-Item -LiteralPath $TempRoot -Recurse -Force }
 }
