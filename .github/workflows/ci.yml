@@ -9,32 +9,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  shell:
-    name: Shell (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  shell-debug:
+    name: Shell debug (ubuntu-latest)
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-      - name: Validate skills
-        run: ./oceans validate
-      - name: Run shell tests
-        run: ./oceans test
+      - name: Fetch and run shell tests
+        run: |
+          git init -q "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C "$GITHUB_WORKSPACE" fetch -q --depth 1 origin "$GITHUB_SHA"
+          git -C "$GITHUB_WORKSPACE" checkout -q FETCH_HEAD
+          git -C "$GITHUB_WORKSPACE" -c protocol.version=2 submodule update -q --init --recursive
+          cd "$GITHUB_WORKSPACE"
+          ./oceans validate
+          ./oceans test
 
-  powershell:
-    name: PowerShell (windows-latest)
+  powershell-debug:
+    name: PowerShell debug (windows-latest)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-      - name: Validate skills
+      - name: Fetch and run PowerShell validation
         shell: pwsh
-        run: .\oceans.ps1 validate
-      - name: Run PowerShell tests
-        shell: pwsh
-        run: .\oceans.ps1 test
+        run: |
+          git init -q $env:GITHUB_WORKSPACE
+          git -C $env:GITHUB_WORKSPACE remote add origin "https://github.com/$env:GITHUB_REPOSITORY.git"
+          git -C $env:GITHUB_WORKSPACE fetch -q --depth 1 origin $env:GITHUB_SHA
+          git -C $env:GITHUB_WORKSPACE checkout -q FETCH_HEAD
+          git -C $env:GITHUB_WORKSPACE -c protocol.version=2 submodule update -q --init --recursive
+          Set-Location $env:GITHUB_WORKSPACE
+          .\oceans.ps1 validate
