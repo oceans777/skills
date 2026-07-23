@@ -256,6 +256,7 @@ if [ -n "$risks" ] && [ "$ALLOW_RISK" -ne 1 ]; then
   printf '%s\n' "$risks" >&2
   exit 1
 fi
+candidate_content_sha256=$(oceans_skill_content_sha256 "$PREPARED_SKILL")
 
 record_path=$(oceans_catalog_record_path "$CATALOG_ROOT" "$skill_name")
 if [ -f "$record_path" ] && [ "$REPLACE_EXISTING" -ne 1 ]; then
@@ -269,6 +270,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "candidate-plan-skill: $skill_name"
   echo "candidate-plan-repository: $package_repository"
   echo "candidate-plan-source: $upstream_repository@$source_commit"
+  echo "candidate-plan-content-sha256: $candidate_content_sha256"
   echo "candidate-plan-files: $file_count"
   echo "candidate-plan-bytes: $total_bytes"
   exit 0
@@ -294,6 +296,7 @@ if [ -f "$record_path" ]; then
   current_upstream_path=$(oceans_catalog_record_value "$record_path" upstream_path || true)
   current_upstream_ref=$(oceans_catalog_record_value "$record_path" upstream_ref || true)
   current_upstream_commit=$(oceans_catalog_record_value "$record_path" upstream_commit || true)
+  current_content_sha256=$(oceans_catalog_record_value "$record_path" content_sha256 || true)
   current_replacement=$(oceans_catalog_record_value "$record_path" replacement || true)
   current_status_reason=$(oceans_catalog_record_value "$record_path" status_reason || true)
 else
@@ -302,6 +305,7 @@ else
   current_upstream_path=
   current_upstream_ref=
   current_upstream_commit=
+  current_content_sha256=
   current_replacement=
   current_status_reason=
 fi
@@ -319,7 +323,8 @@ fi
 if ! oceans_catalog_write_record "$CATALOG_ROOT" "$skill_name" "$current_status" "$package_repository" \
   "$current_upstream_repository" "$current_upstream_path" "$current_upstream_ref" "$current_upstream_commit" \
   "$upstream_repository" "$url_skill_path" "$source_ref" "$source_commit" \
-  "$current_replacement" "$current_status_reason" "queued candidate $source_commit"; then
+  "$current_replacement" "$current_status_reason" "queued candidate $source_commit with content $candidate_content_sha256" \
+  "$current_content_sha256" "$candidate_content_sha256"; then
   if [ -d "$backup_path" ]; then
     restore_stage=$(oceans_new_staging_directory "$review_path")
     cp -R "$backup_path"/. "$restore_stage"
@@ -334,6 +339,7 @@ fi
 echo "candidate-added: $skill_name"
 echo "catalog-state: $current_status"
 echo "candidate-commit: $source_commit"
+echo "candidate-content-sha256: $candidate_content_sha256"
 if [ "$existing" -eq 1 ]; then
   echo "active-package-preserved: $skill_name"
 fi
