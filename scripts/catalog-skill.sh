@@ -22,7 +22,10 @@ cleanup() {
   [ "$LOCK_HELD" -eq 0 ] || oceans_catalog_release_lock
   [ -z "$TEMP_ROOT" ] || rm -rf "$TEMP_ROOT"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'cleanup; exit 129' HUP
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -71,6 +74,7 @@ load_record() {
   CANDIDATE_REF=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_ref || true)
   CANDIDATE_COMMIT=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_commit || true)
   CURRENT_REPLACEMENT=$(oceans_catalog_record_value "$RECORD_PATH" replacement || true)
+  CURRENT_STATUS_REASON=$(oceans_catalog_record_value "$RECORD_PATH" status_reason || true)
 }
 
 acquire_skill_lock() {
@@ -106,6 +110,14 @@ restore_target_from_backup() {
     oceans_commit_staged_directory "$restore_stage" "$target_path"
   else
     rm -rf "$target_path"
+  fi
+}
+
+remove_hold_best_effort() {
+  hold_path=$1
+  [ ! -e "$hold_path" ] && return 0
+  if ! rm -rf "$hold_path"; then
+    echo "WARNING: committed lifecycle state is valid, but temporary review hold could not be removed: $hold_path" >&2
   fi
 }
 
@@ -148,7 +160,7 @@ promote_candidate() {
   fi
 
   if [ "$promotion_ok" -eq 1 ]; then
-    rm -rf "$review_hold"
+    remove_hold_best_effort "$review_hold"
     echo "catalog-state: active"
     echo "skill: $SKILL"
     echo "activated-commit: $CANDIDATE_COMMIT"
@@ -171,15 +183,15 @@ reject_candidate() {
 
   if [ "$STATUS" = pending-review ]; then
     if rm -f "$RECORD_PATH"; then
-      rm -rf "$review_hold"
+      remove_hold_best_effort "$review_hold"
       echo "catalog-candidate-rejected: $SKILL"
       echo "catalog-record-removed: $SKILL"
       return
     fi
   elif oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" "$STATUS" "$PACKAGE_REPOSITORY" \
     "$UPSTREAM_REPOSITORY" "$UPSTREAM_PATH" "$UPSTREAM_REF" "$UPSTREAM_COMMIT" \
-    "" "" "" "" "$CURRENT_REPLACEMENT" "" "rejected candidate $CANDIDATE_COMMIT"; then
-    rm -rf "$review_hold"
+    "" "" "" "" "$CURRENT_REPLACEMENT" "$CURRENT_STATUS_REASON" "rejected candidate $CANDIDATE_COMMIT"; then
+    remove_hold_best_effort "$review_hold"
     echo "catalog-candidate-rejected: $SKILL"
     echo "catalog-state: $STATUS"
     return
