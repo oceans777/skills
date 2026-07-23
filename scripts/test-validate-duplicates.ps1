@@ -1,179 +1,102 @@
 $ErrorActionPreference = "Stop"
-
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
 $TestRoot = Join-Path $CanonicalTemp ("oceans-validate-test-" + [Guid]::NewGuid().ToString("N"))
+$FirstPartyRoot = Join-Path $TestRoot "oceans-skills"
+$CommunityRoot = Join-Path $TestRoot "community-skills"
 
-function Assert-Contains {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string] $Text,
-
-    [Parameter(Mandatory = $true)]
-    [string] $Expected
-  )
-
-  if (-not $Text.Contains($Expected)) {
-    throw "Expected output to contain: $Expected"
-  }
+function Assert-Contains([string] $Text, [string] $Expected) { if (-not $Text.Contains($Expected)) { throw "Expected output to contain: $Expected" } }
+function Assert-NotContains([string] $Text, [string] $Unexpected) { if ($Text.Contains($Unexpected)) { throw "Expected output not to contain: $Unexpected" } }
+function Write-Skill([string] $Root, [string] $Folder, [string] $Name, [string] $Description) {
+  $Path = Join-Path $Root $Folder
+  New-Item -ItemType Directory -Force -Path $Path | Out-Null
+  Set-Content -LiteralPath (Join-Path $Path "SKILL.md") -Value "---`nname: $Name`ndescription: $Description`n---`n" -Encoding UTF8
+  return $Path
 }
-
-function Assert-NotContains {
-  param(
-    [Parameter(Mandatory = $true)][string] $Text,
-    [Parameter(Mandatory = $true)][string] $Unexpected
-  )
-  if ($Text.Contains($Unexpected)) {
-    throw "Expected output not to contain: $Unexpected"
-  }
+function Invoke-Validate {
+  $Previous = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $Output = & powershell -NoProfile -ExecutionPolicy Bypass -File "$RepoRoot\scripts\validate-skills.ps1" -FirstPartySkillsRoot $FirstPartyRoot -CommunitySkillsRoot $CommunityRoot -WithoutCatalog *>&1 | Out-String
+    $Code = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $Previous }
+  return [PSCustomObject]@{ ExitCode = $Code; Output = $Output }
 }
-
+function Expect-Failure([string] $Message) { $script:Result = Invoke-Validate; if ($script:Result.ExitCode -eq 0) { throw $Message } }
 function Remove-TestRoot {
-  if (-not (Test-Path -LiteralPath $TestRoot)) {
-    return
-  }
-
+  if (-not (Test-Path -LiteralPath $TestRoot)) { return }
   $ResolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $TestRoot).Path)
-  $ResolvedTemp = $CanonicalTemp
-  if (-not $ResolvedTemp.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
-    $ResolvedTemp += [System.IO.Path]::DirectorySeparatorChar
-  }
-
-  $LeafName = Split-Path -Leaf $ResolvedRoot
-  if (-not $ResolvedRoot.StartsWith($ResolvedTemp, [StringComparison]::OrdinalIgnoreCase) -or
-      -not $LeafName.StartsWith("oceans-validate-test-", [StringComparison]::Ordinal)) {
-    throw "Unsafe cleanup target: $ResolvedRoot"
-  }
-
+  $Prefix = $CanonicalTemp.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+  if (-not $ResolvedRoot.StartsWith($Prefix, [StringComparison]::OrdinalIgnoreCase) -or -not (Split-Path -Leaf $ResolvedRoot).StartsWith("oceans-validate-test-")) { throw "Unsafe cleanup target: $ResolvedRoot" }
   Remove-Item -LiteralPath $ResolvedRoot -Recurse -Force
 }
 
-function Invoke-ValidateSkills {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string] $FirstPartyRoot,
-
-    [Parameter(Mandatory = $true)]
-    [string] $CommunityRoot
-  )
-
-  $PreviousErrorActionPreference = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  try {
-    $Output = & powershell -NoProfile -ExecutionPolicy Bypass -File "$RepoRoot\scripts\validate-skills.ps1" -FirstPartySkillsRoot $FirstPartyRoot -CommunitySkillsRoot $CommunityRoot *>&1 | Out-String
-    $ExitCode = $LASTEXITCODE
-  } finally {
-    $ErrorActionPreference = $PreviousErrorActionPreference
-  }
-
-  [PSCustomObject]@{
-    ExitCode = $ExitCode
-    Output = $Output
-  }
-}
-
 try {
-  $FirstPartyRoot = Join-Path $TestRoot "oceans-skills"
-  $CommunityRoot = Join-Path $TestRoot "community-skills"
+  New-Item -ItemType Directory -Force -Path $FirstPartyRoot, $CommunityRoot | Out-Null
+  Write-Skill $FirstPartyRoot "duplicate-skill" "duplicate-skill" "First party." | Out-Null
+  $CommunityDuplicate = Write-Skill $CommunityRoot "duplicate-skill" "duplicate-skill" "Community."
+  Set-Content (Join-Path $CommunityDuplicate "UPSTREAM.md") "upstream" -Encoding UTF8
+  Set-Content (Join-Path $CommunityDuplicate "PATCHES.md") "patches" -Encoding UTF8
+  Set-Content (Join-Path $CommunityDuplicate "LICENSE") "license" -Encoding UTF8
+  Expect-Failure "Expected duplicate validation to fail."
+  Assert-Contains $Result.Output "Duplicate skill name across repositories: duplicate-skill"
 
-  New-Item -ItemType Directory -Force -Path (Join-Path $FirstPartyRoot "duplicate-skill") | Out-Null
-  Set-Content -LiteralPath (Join-Path $FirstPartyRoot "duplicate-skill\SKILL.md") -Value "---`nname: duplicate-skill`ndescription: First party.`n---`n" -Encoding UTF8
+  $Empty = Write-Skill $CommunityRoot "empty-attribution-skill" "empty-attribution-skill" "Empty attribution."
+  Set-Content (Join-Path $Empty "UPSTREAM.md") "" -Encoding UTF8
+  Set-Content (Join-Path $Empty "PATCHES.md") "   " -Encoding UTF8
+  Set-Content (Join-Path $Empty "LICENSE") "" -Encoding UTF8
+  Expect-Failure "Expected empty attribution validation to fail."
+  Assert-Contains $Result.Output "Missing or empty UPSTREAM.md in community-skills: empty-attribution-skill"
+  Assert-Contains $Result.Output "Missing or empty PATCHES.md in community-skills: empty-attribution-skill"
+  Assert-Contains $Result.Output "Missing or empty LICENSE in community-skills: empty-attribution-skill"
 
-  New-Item -ItemType Directory -Force -Path (Join-Path $CommunityRoot "duplicate-skill") | Out-Null
-  Set-Content -LiteralPath (Join-Path $CommunityRoot "duplicate-skill\SKILL.md") -Value "---`nname: duplicate-skill`ndescription: Community.`n---`n" -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $CommunityRoot "duplicate-skill\UPSTREAM.md") -Value "upstream" -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $CommunityRoot "duplicate-skill\PATCHES.md") -Value "patches" -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $CommunityRoot "duplicate-skill\LICENSE") -Value "license" -Encoding UTF8
+  $MissingLicense = Join-Path $FirstPartyRoot "missing-license-reference"
+  New-Item -ItemType Directory -Force -Path $MissingLicense | Out-Null
+  Set-Content (Join-Path $MissingLicense "SKILL.md") "---`nname: missing-license-reference`ndescription: Missing license reference.`nlicense: Complete terms in LICENSE.txt`n---`n" -Encoding UTF8
+  Expect-Failure "Expected missing license reference to fail."
+  Assert-Contains $Result.Output "Missing referenced license file in oceans-skills: missing-license-reference"
 
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  if ($Result.ExitCode -eq 0) {
-    throw "Expected duplicate validation to fail."
-  }
+  Write-Skill $FirstPartyRoot "metadata-mismatch" "different-name" "Name mismatch." | Out-Null
+  Expect-Failure "Expected metadata mismatch to fail."
+  Assert-Contains $Result.Output "risk: skill name does not match folder name"
+  $BadFolder = Join-Path $FirstPartyRoot "bad folder"
+  New-Item -ItemType Directory -Force -Path $BadFolder | Out-Null
+  Set-Content (Join-Path $BadFolder "README.md") "missing" -Encoding UTF8
+  Expect-Failure "Expected invalid folder to fail."
+  Assert-Contains $Result.Output "risk: invalid skill folder name"
 
-  Assert-Contains -Text $Result.Output -Expected "Duplicate skill name across repositories: duplicate-skill"
+  $Secret = Write-Skill $FirstPartyRoot "secret-risk" "secret-risk" "Risk scan fixture."
+  Add-Content (Join-Path $Secret "SKILL.md") "api_key=sk-example-not-a-real-secret" -Encoding UTF8
+  Expect-Failure "Expected secret-like content to fail."
+  Assert-Contains $Result.Output "secret-risk: risk: secret-like text"
 
-  $EmptyCommunitySkill = Join-Path $CommunityRoot "empty-attribution-skill"
-  New-Item -ItemType Directory -Force -Path $EmptyCommunitySkill | Out-Null
-  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "SKILL.md") -Value "---`nname: empty-attribution-skill`ndescription: Empty attribution.`n---`n" -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "UPSTREAM.md") -Value "" -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "PATCHES.md") -Value "   " -Encoding UTF8
-  Set-Content -LiteralPath (Join-Path $EmptyCommunitySkill "LICENSE") -Value "" -Encoding UTF8
-
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  if ($Result.ExitCode -eq 0) {
-    throw "Expected empty community attribution validation to fail."
-  }
-
-  Assert-Contains -Text $Result.Output -Expected "Missing or empty UPSTREAM.md in community-skills: empty-attribution-skill"
-  Assert-Contains -Text $Result.Output -Expected "Missing or empty PATCHES.md in community-skills: empty-attribution-skill"
-  Assert-Contains -Text $Result.Output -Expected "Missing or empty LICENSE in community-skills: empty-attribution-skill"
-
-  $MissingLicenseRef = Join-Path $FirstPartyRoot "missing-license-reference"
-  New-Item -ItemType Directory -Force -Path $MissingLicenseRef | Out-Null
-  Set-Content -LiteralPath (Join-Path $MissingLicenseRef "SKILL.md") -Value "---`nname: missing-license-reference`ndescription: Missing license reference.`nlicense: Complete terms in LICENSE.txt`n---`n" -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  if ($Result.ExitCode -eq 0) {
-    throw "Expected validate to fail for missing referenced license file."
-  }
-  Assert-Contains -Text $Result.Output -Expected "Missing referenced license file in oceans-skills: missing-license-reference"
-
-  $InvalidMetadata = Join-Path $FirstPartyRoot "metadata-mismatch"
-  New-Item -ItemType Directory -Force -Path $InvalidMetadata | Out-Null
-  Set-Content -LiteralPath (Join-Path $InvalidMetadata "SKILL.md") -Value "---`nname: different-name`ndescription: Name mismatch.`n---`n" -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  if ($Result.ExitCode -eq 0) {
-    throw "Expected validate to fail for skill metadata mismatch."
-  }
-  Assert-Contains -Text $Result.Output -Expected "Invalid skill metadata in oceans-skills: metadata-mismatch: risk: skill name does not match folder name"
-
-  $InvalidFolderMissingSkill = Join-Path $FirstPartyRoot "bad folder"
-  New-Item -ItemType Directory -Force -Path $InvalidFolderMissingSkill | Out-Null
-  Set-Content -LiteralPath (Join-Path $InvalidFolderMissingSkill "README.md") -Value "Missing SKILL.md." -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  if ($Result.ExitCode -eq 0) {
-    throw "Expected validate to fail for invalid folder name without SKILL.md."
-  }
-  Assert-Contains -Text $Result.Output -Expected "Invalid skill metadata in oceans-skills: bad folder: risk: invalid skill folder name"
-
-  $SecretRisk = Join-Path $FirstPartyRoot "secret-risk"
-  New-Item -ItemType Directory -Force -Path $SecretRisk | Out-Null
-  Set-Content -LiteralPath (Join-Path $SecretRisk "SKILL.md") -Value "---`nname: secret-risk`ndescription: Risk scan fixture.`n---`napi_key=sk-example-not-a-real-secret`n" -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  if ($Result.ExitCode -eq 0) { throw "Expected validate to fail for secret-like content." }
-  Assert-Contains -Text $Result.Output -Expected "Unsafe skill content in oceans-skills: secret-risk: risk: secret-like text"
-
-  $ValidUtf8 = Join-Path $FirstPartyRoot "valid-utf8"
-  New-Item -ItemType Directory -Force -Path $ValidUtf8 | Out-Null
-  Set-Content -LiteralPath (Join-Path $ValidUtf8 "SKILL.md") -Value "---`nname: valid-utf8`ndescription: Valid UTF-8 fixture.`n---`n中文内容应当通过严格 UTF-8 检查。`n" -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  Assert-NotContains -Text $Result.Output -Unexpected "Unsafe skill content in oceans-skills: valid-utf8: risk: binary or unreadable file"
+  $ValidUtf8 = Write-Skill $FirstPartyRoot "valid-utf8" "valid-utf8" "Valid UTF-8 fixture."
+  Add-Content (Join-Path $ValidUtf8 "SKILL.md") "中文内容应当通过严格 UTF-8 检查。" -Encoding UTF8
+  $Result = Invoke-Validate
+  Assert-NotContains $Result.Output "valid-utf8: risk: binary or unreadable file"
 
   $InvalidUtf8 = Join-Path $FirstPartyRoot "invalid-utf8"
   New-Item -ItemType Directory -Force -Path $InvalidUtf8 | Out-Null
   [System.IO.File]::WriteAllBytes((Join-Path $InvalidUtf8 "SKILL.md"), [byte[]](0xFF, 0xFE, 0x00))
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  if ($Result.ExitCode -eq 0) { throw "Expected validate to fail for invalid UTF-8." }
-  Assert-Contains -Text $Result.Output -Expected "Unsafe skill content in oceans-skills: invalid-utf8: risk: binary or unreadable file"
+  Expect-Failure "Expected invalid UTF-8 to fail."
+  Assert-Contains $Result.Output "invalid-utf8: risk: binary or unreadable file"
 
   $Unterminated = Join-Path $FirstPartyRoot "unterminated-frontmatter"
   New-Item -ItemType Directory -Force -Path $Unterminated | Out-Null
-  Set-Content -LiteralPath (Join-Path $Unterminated "SKILL.md") -Value "---`nname: unterminated-frontmatter`ndescription: This frontmatter never closes.`n" -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  Assert-Contains -Text $Result.Output -Expected "risk: missing or unterminated skill frontmatter"
+  Set-Content (Join-Path $Unterminated "SKILL.md") "---`nname: unterminated-frontmatter`ndescription: This frontmatter never closes.`n" -Encoding UTF8
+  Expect-Failure "Expected unterminated frontmatter to fail."
+  Assert-Contains $Result.Output "risk: missing or unterminated skill frontmatter"
 
   $DuplicateKey = Join-Path $FirstPartyRoot "duplicate-key"
   New-Item -ItemType Directory -Force -Path $DuplicateKey | Out-Null
-  Set-Content -LiteralPath (Join-Path $DuplicateKey "SKILL.md") -Value "---`nname: duplicate-key`nname: shadow-name`ndescription: Duplicate key fixture.`n---`n" -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  Assert-Contains -Text $Result.Output -Expected "risk: duplicate frontmatter key: name"
+  Set-Content (Join-Path $DuplicateKey "SKILL.md") "---`nname: duplicate-key`nname: shadow-name`ndescription: Duplicate key fixture.`n---`n" -Encoding UTF8
+  Expect-Failure "Expected duplicate frontmatter key to fail."
+  Assert-Contains $Result.Output "risk: duplicate frontmatter key: name"
 
-  $BlockDescription = Join-Path $FirstPartyRoot "block-description"
-  New-Item -ItemType Directory -Force -Path $BlockDescription | Out-Null
-  Set-Content -LiteralPath (Join-Path $BlockDescription "SKILL.md") -Value "---`nname: block-description`ndescription: |`n  Valid multiline description.`n---`n" -Encoding UTF8
-  $Result = Invoke-ValidateSkills -FirstPartyRoot $FirstPartyRoot -CommunityRoot $CommunityRoot
-  Assert-NotContains -Text $Result.Output -Unexpected "Invalid skill metadata in oceans-skills: block-description"
-
+  $Block = Join-Path $FirstPartyRoot "block-description"
+  New-Item -ItemType Directory -Force -Path $Block | Out-Null
+  Set-Content (Join-Path $Block "SKILL.md") "---`nname: block-description`ndescription: |`n  Valid multiline description.`n---`n" -Encoding UTF8
+  $Result = Invoke-Validate
+  Assert-NotContains $Result.Output "Invalid skill metadata in oceans-skills: block-description"
   Write-Host "PowerShell validate duplicate test passed."
-} finally {
-  Remove-TestRoot
-}
+} finally { Remove-TestRoot }
