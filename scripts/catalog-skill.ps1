@@ -38,6 +38,8 @@ function Load-Record {
   $script:Status = [string]$script:Record["status"]
   $script:PackageRepository = [string]$script:Record["package_repository"]
   $script:CandidateCommit = [string]$script:Record["candidate_upstream_commit"]
+  $script:ContentSha256 = [string]$script:Record["content_sha256"]
+  $script:CandidateContentSha256 = [string]$script:Record["candidate_content_sha256"]
 }
 
 function Enter-SkillLock {
@@ -98,6 +100,12 @@ function Assert-CandidateValid {
       }
     }
   }
+  if (-not (Test-OceansSha256 -Value $script:CandidateContentSha256)) { throw "Candidate content SHA-256 is missing or invalid: $Skill" }
+  $ActualCandidateSha256 = Get-OceansSkillContentSha256 -SkillPath $CandidateRoot
+  if ($ActualCandidateSha256 -cne $script:CandidateContentSha256) {
+    throw "Candidate content changed after intake: $Skill. Expected $($script:CandidateContentSha256), got $ActualCandidateSha256"
+  }
+  return $ActualCandidateSha256
 }
 
 function Restore-PackageFromBackup {
@@ -129,7 +137,7 @@ function Promote-Candidate {
   if ($script:Status -notin @("pending-review", "active")) { throw "catalog-transition-not-allowed: $($script:Status) -> active" }
   if ([string]::IsNullOrWhiteSpace($script:CandidateCommit)) { throw "catalog-candidate-not-found: $Skill" }
   $ReviewPath = Get-OceansCatalogReviewPath -CatalogRoot $CatalogRoot -PackageRepository $script:PackageRepository -SkillName $Skill
-  Assert-CandidateValid -CandidateRoot $ReviewPath
+  $ExpectedContentSha256 = Assert-CandidateValid -CandidateRoot $ReviewPath
   $TargetRoot = if ($script:PackageRepository -eq "oceans-skills") { $FirstPartySkillsRoot } else { $CommunitySkillsRoot }
   $TargetPath = Join-Path $TargetRoot $Skill
   if ($script:Status -eq "pending-review" -and (Test-Path -LiteralPath $TargetPath)) { throw "Pending new skill already exists in package repository: $Skill" }
@@ -149,7 +157,11 @@ function Promote-Candidate {
     $StagingPath = New-OceansStagingDirectory -TargetPath $TargetPath
     Get-ChildItem -LiteralPath $ReviewHold -Force | Copy-Item -Destination $StagingPath -Recurse -Force
     Remove-OceansExcludedPaths -RootPath $StagingPath
+    $StagedContentSha256 = Get-OceansSkillContentSha256 -SkillPath $StagingPath
+    if ($StagedContentSha256 -cne $ExpectedContentSha256) { throw "Candidate content changed during promotion: $Skill" }
     Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $TargetPath
+    $PublishedContentSha256 = Get-OceansSkillContentSha256 -SkillPath $TargetPath
+    if ($PublishedContentSha256 -cne $ExpectedContentSha256) { throw "Published content digest mismatch after promotion: $Skill" }
 
     Write-OceansCatalogRecord `
       -CatalogRoot $CatalogRoot -SkillName $Skill -Status "active" -PackageRepository $script:PackageRepository `
@@ -157,18 +169,19 @@ function Promote-Candidate {
       -UpstreamPath ([string]$script:Record["candidate_upstream_path"]) `
       -UpstreamRef ([string]$script:Record["candidate_upstream_ref"]) `
       -UpstreamCommit ([string]$script:Record["candidate_upstream_commit"]) `
-      -TransitionNote "activated reviewed candidate $($script:CandidateCommit)" | Out-Null
+      -ContentSha256 $PublishedContentSha256 `
+      -TransitionNote "activated reviewed candidate $($script:CandidateCommit) with content $PublishedContentSha256" | Out-Null
   } catch {
     try { Restore-PackageFromBackup -TargetPath $TargetPath -BackupPath $BackupPath } catch { Write-Warning "CRITICAL: failed to restore package after activation failure: $Skill" }
     if (Test-Path -LiteralPath $ReviewHold -PathType Container) { Move-Item -LiteralPath $ReviewHold -Destination $ReviewPath }
     throw "Candidate activation failed and was rolled back: $Skill. $($_.Exception.Message)"
   }
 
-  # Package and catalog are the commit point. Hold cleanup cannot roll them back.
   Remove-ReviewHoldBestEffort -ReviewHold $ReviewHold
   Write-Host "catalog-state: active"
   Write-Host "skill: $Skill"
   Write-Host "activated-commit: $($script:CandidateCommit)"
+  Write-Host "activated-content-sha256: $ExpectedContentSha256"
 }
 
 function Reject-Candidate {
@@ -189,6 +202,7 @@ function Reject-Candidate {
         -UpstreamPath ([string]$script:Record["upstream_path"]) `
         -UpstreamRef ([string]$script:Record["upstream_ref"]) `
         -UpstreamCommit ([string]$script:Record["upstream_commit"]) `
+        -ContentSha256 $script:ContentSha256 `
         -Replacement ([string]$script:Record["replacement"]) `
         -StatusReason ([string]$script:Record["status_reason"]) `
         -TransitionNote "rejected candidate $($script:CandidateCommit)" | Out-Null
@@ -199,7 +213,6 @@ function Reject-Candidate {
     throw "Candidate rejection failed and was rolled back: $Skill. $($_.Exception.Message)"
   }
 
-  # Record state is the commit point. Cleanup failure leaves only a removable hold.
   Remove-ReviewHoldBestEffort -ReviewHold $ReviewHold
   Write-Host "catalog-candidate-rejected: $Skill"
 }
@@ -235,6 +248,7 @@ function Set-LifecycleStatus {
     -UpstreamPath ([string]$script:Record["upstream_path"]) `
     -UpstreamRef ([string]$script:Record["upstream_ref"]) `
     -UpstreamCommit ([string]$script:Record["upstream_commit"]) `
+    -ContentSha256 $script:ContentSha256 `
     -Replacement $NewReplacement -StatusReason $StatusReason -TransitionNote $TransitionNote | Out-Null
 
   Invoke-RuntimeReconciliation -TargetStatus $TargetStatus
