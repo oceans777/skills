@@ -8,39 +8,58 @@ $CommunityRepo = Join-Path $TestRoot "community"
 $Catalog = Join-Path $TestRoot "catalog"
 $Install = Join-Path $TestRoot "install"
 
-function Invoke-Git([string[]]$Arguments) {
+function Invoke-Git {
+  param([Parameter(Mandatory = $true)][string[]] $Arguments)
   $Output = & git @Arguments 2>&1
-  if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed.`n$($Output | Out-String)" }
+  if ($LASTEXITCODE -ne 0) {
+    throw "git $($Arguments -join ' ') failed.`n$($Output | Out-String)"
+  }
 }
-function Init-Repo([string]$Path) {
+
+function Init-Repo {
+  param([Parameter(Mandatory = $true)][string] $Path)
   New-Item -ItemType Directory -Force -Path $Path | Out-Null
-  Invoke-Git @("init", "-q", $Path)
-  Invoke-Git @("-C", $Path, "checkout", "-q", "-B", "main")
-  Invoke-Git @("-C", $Path, "config", "user.email", "test@example.invalid")
-  Invoke-Git @("-C", $Path, "config", "user.name", "Test")
-  Invoke-Git @("-C", $Path, "config", "core.autocrlf", "false")
+  Invoke-Git -Arguments @("init", "-q", $Path)
+  Invoke-Git -Arguments @("-C", $Path, "checkout", "-q", "-B", "main")
+  Invoke-Git -Arguments @("-C", $Path, "config", "user.email", "test@example.invalid")
+  Invoke-Git -Arguments @("-C", $Path, "config", "user.name", "Test")
+  Invoke-Git -Arguments @("-C", $Path, "config", "core.autocrlf", "false")
 }
-function Write-Utf8NoBom([string]$Path, [string[]]$Lines) {
+
+function Write-Utf8NoBom {
+  param(
+    [Parameter(Mandatory = $true)][string] $Path,
+    [Parameter(Mandatory = $true)][string[]] $Lines
+  )
   [System.IO.Directory]::CreateDirectory((Split-Path -Parent $Path)) | Out-Null
   [System.IO.File]::WriteAllLines($Path, $Lines, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 try {
-  Init-Repo $Upstream
-  Write-Utf8NoBom (Join-Path $Upstream "skills\sample-import\SKILL.md") @("---", "name: sample-import", "description: Imported fixture skill.", "---")
-  Write-Utf8NoBom (Join-Path $Upstream "LICENSE") @("MIT fixture license")
-  Invoke-Git @("-C", $Upstream, "add", ".")
-  Invoke-Git @("-C", $Upstream, "commit", "-q", "-m", "initial")
+  Init-Repo -Path $Upstream
+  Write-Utf8NoBom -Path (Join-Path $Upstream "skills\sample-import\SKILL.md") -Lines @(
+    "---",
+    "name: sample-import",
+    "description: Imported fixture skill.",
+    "---"
+  )
+  Write-Utf8NoBom -Path (Join-Path $Upstream "LICENSE") -Lines @("MIT fixture license")
+  Invoke-Git -Arguments @("-C", $Upstream, "add", ".")
+  Invoke-Git -Arguments @("-C", $Upstream, "commit", "-q", "-m", "initial")
 
-  Init-Repo $FirstRepo
-  Write-Utf8NoBom (Join-Path $FirstRepo "skills\.gitkeep") @()
-  Invoke-Git @("-C", $FirstRepo, "add", ".")
-  Invoke-Git @("-C", $FirstRepo, "commit", "-q", "-m", "initial")
+  Init-Repo -Path $FirstRepo
+  $FirstSkillsRoot = Join-Path $FirstRepo "skills"
+  New-Item -ItemType Directory -Force -Path $FirstSkillsRoot | Out-Null
+  New-Item -ItemType File -Force -Path (Join-Path $FirstSkillsRoot ".gitkeep") | Out-Null
+  Invoke-Git -Arguments @("-C", $FirstRepo, "add", ".")
+  Invoke-Git -Arguments @("-C", $FirstRepo, "commit", "-q", "-m", "initial")
 
-  Init-Repo $CommunityRepo
-  Write-Utf8NoBom (Join-Path $CommunityRepo "skills\.gitkeep") @()
-  Invoke-Git @("-C", $CommunityRepo, "add", ".")
-  Invoke-Git @("-C", $CommunityRepo, "commit", "-q", "-m", "initial")
+  Init-Repo -Path $CommunityRepo
+  $CommunitySkillsRoot = Join-Path $CommunityRepo "skills"
+  New-Item -ItemType Directory -Force -Path $CommunitySkillsRoot | Out-Null
+  New-Item -ItemType File -Force -Path (Join-Path $CommunitySkillsRoot ".gitkeep") | Out-Null
+  Invoke-Git -Arguments @("-C", $CommunityRepo, "add", ".")
+  Invoke-Git -Arguments @("-C", $CommunityRepo, "commit", "-q", "-m", "initial")
 
   foreach ($State in @("active", "pending-review", "deprecated", "archived", "blocked")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $Catalog $State) | Out-Null
@@ -48,26 +67,59 @@ try {
 
   $Output = (& (Join-Path $RepoRoot "scripts\add-skill-from-url.ps1") `
     -Url "https://github.com/example/upstream/tree/main/skills/sample-import" `
-    -LocalRepository $Upstream -Target community `
-    -FirstPartySkillsRoot (Join-Path $FirstRepo "skills") `
-    -CommunitySkillsRoot (Join-Path $CommunityRepo "skills") `
+    -LocalRepository $Upstream `
+    -Target community `
+    -FirstPartySkillsRoot $FirstSkillsRoot `
+    -CommunitySkillsRoot $CommunitySkillsRoot `
     -CatalogRoot $Catalog | Out-String)
-  if ($Output -notmatch 'catalog-state: pending-review') { throw "Intake did not create pending review state." }
-  foreach ($Required in @("SKILL.md", "UPSTREAM.md", "PATCHES.md", "LICENSE")) {
-    if (-not (Test-Path -LiteralPath (Join-Path $CommunityRepo "skills\sample-import\$Required") -PathType Leaf)) { throw "Missing staged file: $Required" }
+  if ($Output -notmatch 'catalog-state: pending-review') {
+    throw "Intake did not create pending review state."
   }
-  if (-not (Test-Path -LiteralPath (Join-Path $Catalog "pending-review\sample-import.skill") -PathType Leaf)) { throw "Missing pending catalog record." }
 
-  & (Join-Path $RepoRoot "scripts\validate-skills.ps1") -FirstPartySkillsRoot (Join-Path $FirstRepo "skills") -CommunitySkillsRoot (Join-Path $CommunityRepo "skills") -CatalogRoot $Catalog | Out-Null
-  $InstallOutput = (& (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot (Join-Path $FirstRepo "skills") -CommunitySkillsRoot (Join-Path $CommunityRepo "skills") -CatalogRoot $Catalog | Out-String)
-  if (Test-Path -LiteralPath (Join-Path $Install "sample-import")) { throw "Pending imported skill must not install." }
-  if ($InstallOutput -notmatch 'Skipped pending-review skill: sample-import') { throw "Pending intake skip was not reported." }
+  foreach ($Required in @("SKILL.md", "UPSTREAM.md", "PATCHES.md", "LICENSE")) {
+    $RequiredPath = Join-Path $CommunitySkillsRoot "sample-import\$Required"
+    if (-not (Test-Path -LiteralPath $RequiredPath -PathType Leaf)) {
+      throw "Missing staged file: $Required"
+    }
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $Catalog "pending-review\sample-import.skill") -PathType Leaf)) {
+    throw "Missing pending catalog record."
+  }
 
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") activate -CatalogRoot $Catalog -Skill sample-import | Out-Null
-  & (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot (Join-Path $FirstRepo "skills") -CommunitySkillsRoot (Join-Path $CommunityRepo "skills") -CatalogRoot $Catalog | Out-Null
-  if (-not (Test-Path -LiteralPath (Join-Path $Install "sample-import\SKILL.md") -PathType Leaf)) { throw "Activated imported skill was not installed." }
+  & (Join-Path $RepoRoot "scripts\validate-skills.ps1") `
+    -FirstPartySkillsRoot $FirstSkillsRoot `
+    -CommunitySkillsRoot $CommunitySkillsRoot `
+    -CatalogRoot $Catalog | Out-Null
+
+  $InstallOutput = (& (Join-Path $RepoRoot "scripts\install-skills.ps1") `
+    -InstallRoot $Install `
+    -FirstPartySkillsRoot $FirstSkillsRoot `
+    -CommunitySkillsRoot $CommunitySkillsRoot `
+    -CatalogRoot $Catalog | Out-String)
+  if (Test-Path -LiteralPath (Join-Path $Install "sample-import")) {
+    throw "Pending imported skill must not install."
+  }
+  if ($InstallOutput -notmatch 'Skipped pending-review skill: sample-import') {
+    throw "Pending intake skip was not reported."
+  }
+
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") `
+    -Action activate `
+    -CatalogRoot $Catalog `
+    -Skill sample-import | Out-Null
+
+  & (Join-Path $RepoRoot "scripts\install-skills.ps1") `
+    -InstallRoot $Install `
+    -FirstPartySkillsRoot $FirstSkillsRoot `
+    -CommunitySkillsRoot $CommunitySkillsRoot `
+    -CatalogRoot $Catalog | Out-Null
+  if (-not (Test-Path -LiteralPath (Join-Path $Install "sample-import\SKILL.md") -PathType Leaf)) {
+    throw "Activated imported skill was not installed."
+  }
 
   Write-Host "PowerShell URL intake test passed."
 } finally {
-  if (Test-Path -LiteralPath $TestRoot) { Remove-Item -LiteralPath $TestRoot -Recurse -Force }
+  if (Test-Path -LiteralPath $TestRoot) {
+    Remove-Item -LiteralPath $TestRoot -Recurse -Force
+  }
 }
