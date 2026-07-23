@@ -104,15 +104,16 @@ jobs:
       - name: Run PowerShell test
         shell: pwsh
         run: |
-          $failed = $false
-          try {
-            $output = & ".\scripts\${{ matrix.test }}" *>&1
-          } catch {
-            $failed = $true
-            $output = @($output) + @($_ | Format-List * -Force | Out-String)
-          }
-          $output | Tee-Object -FilePath test-output.txt
-          if ($failed) { exit 1 }
+          $records = & pwsh -NoProfile -File ".\scripts\${{ matrix.test }}" *>&1
+          $code = $LASTEXITCODE
+          $text = @($records | ForEach-Object { $_ | Out-String }) -join ""
+          [System.IO.File]::WriteAllText(
+            (Join-Path $PWD "test-output.txt"),
+            $text,
+            (New-Object System.Text.UTF8Encoding($false))
+          )
+          Write-Host $text
+          exit $code
       - name: Upload PowerShell test output
         if: always()
         uses: actions/upload-artifact@v4
