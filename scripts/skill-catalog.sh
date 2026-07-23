@@ -36,6 +36,7 @@ oceans_catalog_states_for_skill() {
     record_path=$(oceans_catalog_record_path "$catalog_root" "$state" "$skill_name")
     [ -f "$record_path" ] && printf '%s\n' "$state"
   done
+  return 0
 }
 
 oceans_catalog_state_for_skill() {
