@@ -82,11 +82,148 @@ function Resolve-OceansRootPath {
   return [System.IO.Path]::GetFullPath($Path)
 }
 
+function Get-OceansPathComparer {
+  if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    return [System.StringComparer]::OrdinalIgnoreCase
+  }
+  return [System.StringComparer]::Ordinal
+}
+
+function Get-OceansRuntimeRegistryPath {
+  if ($env:OCEANS_RUNTIME_ROOTS_FILE) {
+    return [System.IO.Path]::GetFullPath($env:OCEANS_RUNTIME_ROOTS_FILE)
+  }
+
+  if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    $StateHome = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path (Get-OceansHome) "AppData\Local" }
+  } else {
+    $StateHome = if ($env:XDG_STATE_HOME) { $env:XDG_STATE_HOME } else { Join-OceansPath -Parts @((Get-OceansHome), ".local", "state") }
+  }
+  return Join-OceansPath -Parts @($StateHome, "oceans777-skills", "runtime-roots")
+}
+
+function Test-OceansSafeRuntimeRecordValue {
+  param([AllowEmptyString()][string] $Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+  return -not ($Value.Contains("|") -or $Value.IndexOfAny([char[]]"`r`n") -ge 0)
+}
+
+function Register-OceansSkillRoot {
+  param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("codex", "agents", "claude", "openclaw", "hermes", "custom")]
+    [string] $Runtime,
+
+    [Parameter(Mandatory = $true)][string] $Path
+  )
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+    throw "Cannot register missing runtime root: $Path"
+  }
+  $RootItem = Get-Item -LiteralPath $Path -Force
+  if (($RootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Cannot register reparse-point runtime root: $Path"
+  }
+
+  $ResolvedPath = Resolve-OceansRootPath -Path $RootItem.FullName
+  if (-not (Test-OceansSafeRuntimeRecordValue -Value $ResolvedPath)) {
+    throw "Runtime root contains unsupported characters: $ResolvedPath"
+  }
+
+  $RegistryPath = Get-OceansRuntimeRegistryPath
+  $RegistryParent = Split-Path -Parent $RegistryPath
+  New-Item -ItemType Directory -Force -Path $RegistryParent | Out-Null
+  $RegistryParentItem = Get-Item -LiteralPath $RegistryParent -Force
+  if (($RegistryParentItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Runtime registry parent must not be a reparse point: $RegistryParent"
+  }
+  if (Test-Path -LiteralPath $RegistryPath) {
+    $RegistryItem = Get-Item -LiteralPath $RegistryPath -Force
+    if (-not $RegistryItem.PSIsContainer -and ($RegistryItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+      # regular file is valid
+    } else {
+      throw "Runtime registry must be a regular file: $RegistryPath"
+    }
+  }
+
+  $LockPath = "$RegistryPath.lock"
+  try {
+    New-Item -ItemType Directory -Path $LockPath -ErrorAction Stop | Out-Null
+  } catch {
+    throw "Another runtime registry update is active: $RegistryPath"
+  }
+
+  $TempPath = Join-Path $RegistryParent ".runtime-roots.$([Guid]::NewGuid().ToString('N'))"
+  try {
+    $Records = New-Object System.Collections.Generic.List[string]
+    $Comparer = Get-OceansPathComparer
+    if (Test-Path -LiteralPath $RegistryPath -PathType Leaf) {
+      foreach ($Line in @(Get-Content -LiteralPath $RegistryPath)) {
+        if ([string]::IsNullOrWhiteSpace($Line)) { continue }
+        $Parts = $Line -split '\|', 3
+        if ($Parts.Count -ne 2) { throw "Malformed runtime registry record: $RegistryPath" }
+        $ExistingRuntime = $Parts[0]
+        $ExistingPath = $Parts[1]
+        if ($ExistingRuntime -notin @("codex", "agents", "claude", "openclaw", "hermes", "custom")) {
+          throw "Malformed runtime registry runtime: $ExistingRuntime"
+        }
+        if (-not (Test-OceansSafeRuntimeRecordValue -Value $ExistingPath)) {
+          throw "Malformed runtime registry path."
+        }
+        if (-not $Comparer.Equals($ExistingPath, $ResolvedPath)) {
+          $Records.Add("$ExistingRuntime|$ExistingPath")
+        }
+      }
+    }
+    $Records.Add("$Runtime|$ResolvedPath")
+    $Sorted = @($Records | Sort-Object -Unique)
+    [System.IO.File]::WriteAllLines($TempPath, $Sorted, (New-Object System.Text.UTF8Encoding($false)))
+    Move-Item -LiteralPath $TempPath -Destination $RegistryPath -Force
+  } finally {
+    if (Test-Path -LiteralPath $TempPath) { Remove-Item -LiteralPath $TempPath -Force }
+    if (Test-Path -LiteralPath $LockPath -PathType Container) { Remove-Item -LiteralPath $LockPath -Recurse -Force }
+  }
+}
+
+function Get-OceansRegisteredSkillRoots {
+  $RegistryPath = Get-OceansRuntimeRegistryPath
+  if (-not (Test-Path -LiteralPath $RegistryPath -PathType Leaf)) { return @() }
+  $RegistryItem = Get-Item -LiteralPath $RegistryPath -Force
+  if (($RegistryItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Runtime registry must not be a reparse point: $RegistryPath"
+  }
+
+  $Roots = New-Object System.Collections.Generic.List[object]
+  foreach ($Line in @(Get-Content -LiteralPath $RegistryPath)) {
+    if ([string]::IsNullOrWhiteSpace($Line)) { continue }
+    $Parts = $Line -split '\|', 3
+    if ($Parts.Count -ne 2) { throw "Malformed runtime registry record: $RegistryPath" }
+    $RegisteredRuntime = $Parts[0]
+    $RegisteredPath = $Parts[1]
+    if ($RegisteredRuntime -notin @("codex", "agents", "claude", "openclaw", "hermes", "custom")) {
+      throw "Malformed runtime registry runtime: $RegisteredRuntime"
+    }
+    if (-not (Test-OceansSafeRuntimeRecordValue -Value $RegisteredPath)) {
+      throw "Malformed runtime registry path."
+    }
+    if (-not (Test-Path -LiteralPath $RegisteredPath -PathType Container)) { continue }
+    $Item = Get-Item -LiteralPath $RegisteredPath -Force
+    if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+    $Roots.Add([PSCustomObject]@{
+      Runtime = $RegisteredRuntime
+      Status = "exists"
+      Path = (Resolve-OceansRootPath -Path $Item.FullName)
+      Reason = "registered runtime skills root"
+    })
+  }
+  return @($Roots)
+}
+
 function Get-OceansSkillRootCandidates {
   $Roots = New-Object System.Collections.Generic.List[object]
 
   foreach ($Definition in Get-OceansSkillRuntimeDefinitions) {
-    $Seen = New-Object System.Collections.Generic.HashSet[string]
+    $Seen = [System.Collections.Generic.HashSet[string]]::new((Get-OceansPathComparer))
     foreach ($CandidateRoot in $Definition.CandidateRoots) {
       $ResolvedPath = Resolve-OceansRootPath -Path $CandidateRoot
       if (-not $Seen.Add($ResolvedPath)) {
@@ -103,11 +240,20 @@ function Get-OceansSkillRootCandidates {
     }
   }
 
-  return $Roots
+  return @($Roots)
 }
 
 function Get-OceansExistingSkillRoots {
-  return @(Get-OceansSkillRootCandidates | Where-Object { $_.Status -eq "exists" })
+  $Roots = New-Object System.Collections.Generic.List[object]
+  $Seen = [System.Collections.Generic.HashSet[string]]::new((Get-OceansPathComparer))
+  $CandidateRoots = @(Get-OceansSkillRootCandidates | Where-Object { $_.Status -eq "exists" })
+  $RegisteredRoots = @(Get-OceansRegisteredSkillRoots)
+  foreach ($Root in @($CandidateRoots + $RegisteredRoots)) {
+    if ($Seen.Add([string]$Root.Path)) {
+      $Roots.Add($Root)
+    }
+  }
+  return @($Roots)
 }
 
 function Get-OceansRuntimeRoot {
@@ -127,6 +273,10 @@ function Get-OceansRuntimeRoot {
     }
     if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
       throw "skill-root-missing: $Path"
+    }
+    $Item = Get-Item -LiteralPath $Path -Force
+    if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "skill-root-reparse-point: $Path"
     }
     return [PSCustomObject]@{
       Runtime = "custom"
@@ -175,7 +325,9 @@ if ($DefineOnly) {
 
 switch ($Mode) {
   "list" {
-    foreach ($Root in Get-OceansSkillRootCandidates) {
+    $CandidateRoots = @(Get-OceansSkillRootCandidates)
+    $RegisteredRoots = @(Get-OceansRegisteredSkillRoots)
+    foreach ($Root in @($CandidateRoots + $RegisteredRoots)) {
       Write-OceansSkillRootRecord -Root $Root
       Write-Host ""
     }
