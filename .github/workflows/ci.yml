@@ -9,8 +9,8 @@ jobs:
     name: Shell (${{ matrix.os }})
     strategy:
       fail-fast: false
-    matrix:
-      os: [ubuntu-latest, macos-latest]
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
