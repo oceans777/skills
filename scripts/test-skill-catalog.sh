@@ -45,12 +45,16 @@ write_record archived-skill archived "$COMMIT_A" retired active-skill
 write_record blocked-skill blocked "$COMMIT_A" security-incident
 write_record deprecated-skill deprecated "$COMMIT_A" superseded active-skill
 
-# A managed archived copy is disabled and preserved; an unmanaged blocked copy is untouched.
+# Managed archived copies are disabled and preserved; private blocked copies are untouched.
 mkdir -p "$INSTALL/archived-skill"
 printf '%s\n' managed-archive > "$INSTALL/archived-skill/SKILL.md"
 printf '%s\n' source_repository=oceans-skills > "$INSTALL/archived-skill/.oceans-skill-source"
 mkdir -p "$INSTALL/blocked-skill"
 printf '%s\n' private-blocked-copy > "$INSTALL/blocked-skill/SKILL.md"
+# A managed deprecated copy remains active but must not receive repository updates.
+mkdir -p "$INSTALL/deprecated-skill"
+printf '%s\n' installed-deprecated-version > "$INSTALL/deprecated-skill/SKILL.md"
+printf '%s\n' source_repository=oceans-skills > "$INSTALL/deprecated-skill/.oceans-skill-source"
 
 sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG" >/dev/null
 OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" --install-root "$INSTALL" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG")
@@ -62,6 +66,7 @@ assert_contains "$OUTPUT" "Disabled managed archived skill: archived-skill"
 assert_file_contains "$INSTALL/blocked-skill/SKILL.md" private-blocked-copy
 assert_contains "$OUTPUT" "Skipped blocked skill: blocked-skill"
 assert_contains "$OUTPUT" "Retained deprecated managed skill without updating: deprecated-skill"
+assert_file_contains "$INSTALL/deprecated-skill/SKILL.md" installed-deprecated-version
 
 # Restore is limited to deprecated/archived and clears stale lifecycle metadata.
 sh "$REPO_ROOT/scripts/catalog-skill.sh" restore --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill archived-skill >/dev/null
