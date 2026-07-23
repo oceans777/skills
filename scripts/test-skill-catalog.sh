@@ -13,6 +13,7 @@ COMMIT_B=abcdefabcdefabcdefabcdefabcdefabcdefabcd
 cleanup() { rm -rf "$TEST_ROOT"; }
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$FIRST" "$COMMUNITY" "$CATALOG/skills" "$CATALOG/review-queue/oceans-skills" "$CATALOG/review-queue/community-skills" "$INSTALL"
+. "$REPO_ROOT/scripts/skill-publish-rules.sh"
 . "$REPO_ROOT/scripts/skill-catalog.sh"
 
 fail() { echo "$*" >&2; exit 1; }
@@ -31,9 +32,10 @@ EOF_SKILL
 }
 write_record() {
   skill=$1; status=$2; commit=$3; reason=${4:-}; replacement=${5:-}
+  digest=$(oceans_skill_content_sha256 "$FIRST/$skill")
   oceans_catalog_write_record "$CATALOG" "$skill" "$status" oceans-skills \
     https://github.com/example/oceans "skills/$skill" main "$commit" \
-    "" "" "" "" "$replacement" "$reason" "fixture $status"
+    "" "" "" "" "$replacement" "$reason" "fixture $status" "$digest" ""
 }
 
 write_skill "$FIRST" active-skill old
@@ -45,14 +47,12 @@ write_record archived-skill archived "$COMMIT_A" retired active-skill
 write_record blocked-skill blocked "$COMMIT_A" security-incident
 write_record deprecated-skill deprecated "$COMMIT_A" superseded active-skill
 
-# Managed archived and blocked copies are disabled and preserved.
 mkdir -p "$INSTALL/archived-skill"
 printf '%s\n' managed-archive > "$INSTALL/archived-skill/SKILL.md"
 printf '%s\n' source_repository=oceans-skills > "$INSTALL/archived-skill/.oceans-skill-source"
 mkdir -p "$INSTALL/blocked-skill"
 printf '%s\n' managed-blocked-copy > "$INSTALL/blocked-skill/SKILL.md"
 printf '%s\n' source_repository=oceans-skills > "$INSTALL/blocked-skill/.oceans-skill-source"
-# A managed deprecated copy remains active but must not receive repository updates.
 mkdir -p "$INSTALL/deprecated-skill"
 printf '%s\n' installed-deprecated-version > "$INSTALL/deprecated-skill/SKILL.md"
 printf '%s\n' source_repository=oceans-skills > "$INSTALL/deprecated-skill/.oceans-skill-source"
@@ -71,7 +71,6 @@ assert_contains "$OUTPUT" "Disabled managed blocked skill: blocked-skill"
 assert_contains "$OUTPUT" "Retained deprecated managed skill without updating: deprecated-skill"
 assert_file_contains "$INSTALL/deprecated-skill/SKILL.md" installed-deprecated-version
 
-# Restore is limited to deprecated/archived and clears stale lifecycle metadata.
 sh "$REPO_ROOT/scripts/catalog-skill.sh" restore --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill >/dev/null
 RECORD=$(oceans_catalog_record_path "$CATALOG" archived-skill)
 [ "$(oceans_catalog_record_value "$RECORD" status)" = active ] || fail "Restore did not activate archived skill."
@@ -86,7 +85,6 @@ if sh "$REPO_ROOT/scripts/catalog-skill.sh" unblock --catalog-root "$CATALOG" --
 sh "$REPO_ROOT/scripts/catalog-skill.sh" unblock --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill --reason remediated >/dev/null
 assert_file_contains "$INSTALL/archived-skill/SKILL.md" version=archived
 
-# A blocked unmanaged local copy is preserved, reported, and leaves the catalog blocked.
 rm -f "$INSTALL/archived-skill/.oceans-skill-source"
 if sh "$REPO_ROOT/scripts/catalog-skill.sh" block --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill --reason second-incident >"$TEST_ROOT/block-output" 2>"$TEST_ROOT/block-error"; then
   fail "Block incorrectly reported success for an unmanaged local copy."
@@ -95,35 +93,46 @@ assert_file_contains "$TEST_ROOT/block-error" "runtime reconciliation failed"
 assert_file_contains "$INSTALL/archived-skill/SKILL.md" version=archived
 [ "$(oceans_catalog_record_value "$RECORD" status)" = blocked ] || fail "Security state did not remain blocked after unmanaged runtime conflict."
 
-# Queue an update while the current active package remains available.
 REVIEW=$CATALOG/review-queue/oceans-skills/active-skill
 write_skill "$CATALOG/review-queue/oceans-skills" active-skill candidate
+CANDIDATE_DIGEST=$(oceans_skill_content_sha256 "$REVIEW")
 RECORD=$(oceans_catalog_record_path "$CATALOG" active-skill)
+CURRENT_DIGEST=$(oceans_catalog_record_value "$RECORD" content_sha256 || true)
 oceans_catalog_write_record "$CATALOG" active-skill active oceans-skills \
   https://github.com/example/oceans skills/active-skill main "$COMMIT_A" \
-  https://github.com/example/upstream skill main "$COMMIT_B" "" "" "queued candidate"
+  https://github.com/example/upstream skill main "$COMMIT_B" "" "" "queued candidate" "$CURRENT_DIGEST" "$CANDIDATE_DIGEST"
 sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG" >/dev/null
 sh "$REPO_ROOT/scripts/install-skills.sh" --install-root "$INSTALL" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG" >/dev/null
 assert_file_contains "$INSTALL/active-skill/SKILL.md" version=old
+
+printf '%s\n' tampered-after-review >> "$REVIEW/SKILL.md"
+if sh "$REPO_ROOT/scripts/catalog-skill.sh" activate --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill active-skill >"$TEST_ROOT/tamper-output" 2>"$TEST_ROOT/tamper-error"; then
+  fail "Tampered candidate was activated."
+fi
+assert_file_contains "$TEST_ROOT/tamper-error" "content changed"
+write_skill "$CATALOG/review-queue/oceans-skills" active-skill candidate
+
 sh "$REPO_ROOT/scripts/catalog-skill.sh" activate --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill active-skill >/dev/null
 assert_file_contains "$FIRST/active-skill/SKILL.md" version=candidate
 [ ! -e "$REVIEW" ] || fail "Activated candidate remained in review queue."
 RECORD=$(oceans_catalog_record_path "$CATALOG" active-skill)
 [ "$(oceans_catalog_record_value "$RECORD" upstream_commit)" = "$COMMIT_B" ] || fail "Candidate provenance was not promoted."
 [ -z "$(oceans_catalog_record_value "$RECORD" candidate_upstream_commit)" ] || fail "Candidate fields were not cleared."
+[ "$(oceans_catalog_record_value "$RECORD" content_sha256)" = "$CANDIDATE_DIGEST" ] || fail "Candidate content fingerprint was not promoted."
+[ -z "$(oceans_catalog_record_value "$RECORD" candidate_content_sha256)" ] || fail "Candidate content fingerprint was not cleared."
 sh "$REPO_ROOT/scripts/install-skills.sh" --install-root "$INSTALL" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG" >/dev/null
 assert_file_contains "$INSTALL/active-skill/SKILL.md" version=candidate
 
-# Rejecting a pending new skill removes only its record and review candidate.
+PENDING_PATH=$CATALOG/review-queue/oceans-skills/pending-skill
 write_skill "$CATALOG/review-queue/oceans-skills" pending-skill candidate
+PENDING_DIGEST=$(oceans_skill_content_sha256 "$PENDING_PATH")
 OCEANS_PENDING=$(oceans_catalog_record_path "$CATALOG" pending-skill)
 oceans_catalog_write_record "$CATALOG" pending-skill pending-review oceans-skills \
-  "" "" "" "" https://github.com/example/upstream skill main "$COMMIT_B" "" "" "new candidate"
+  "" "" "" "" https://github.com/example/upstream skill main "$COMMIT_B" "" "" "new candidate" "" "$PENDING_DIGEST"
 sh "$REPO_ROOT/scripts/catalog-skill.sh" reject --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --skill pending-skill >/dev/null
 [ ! -e "$OCEANS_PENDING" ] || fail "Rejected new skill record remains."
-[ ! -e "$CATALOG/review-queue/oceans-skills/pending-skill" ] || fail "Rejected new skill candidate remains."
+[ ! -e "$PENDING_PATH" ] || fail "Rejected new skill candidate remains."
 
-# Strict schema and exact SHA length fail closed; active operations respect catalog locks.
 RECORD=$(oceans_catalog_record_path "$CATALOG" active-skill)
 cp "$RECORD" "$TEST_ROOT/record-backup"
 printf '%s\n' unknown_field=value >> "$RECORD"
