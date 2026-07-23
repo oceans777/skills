@@ -50,11 +50,11 @@ function Add-ActiveChange([string] $Name, [string] $Version) {
 }
 
 function Run-Publish([bool] $ExpectSuccess, [switch] $DryRun) {
-  $Home = Join-Path $Root "home"; New-Item -ItemType Directory -Force -Path $Home | Out-Null
+  $FixtureHome = Join-Path $Root "home"; New-Item -ItemType Directory -Force -Path $FixtureHome | Out-Null
   $OldHome = $env:HOME; $OldUserProfile = $env:USERPROFILE; $OldGitConfig = $env:GIT_CONFIG_GLOBAL
   $PreviousPreference = $ErrorActionPreference
   try {
-    $env:HOME = $Home; $env:USERPROFILE = $Home; $env:GIT_CONFIG_GLOBAL = Join-Path $Home ".gitconfig"
+    $env:HOME = $FixtureHome; $env:USERPROFILE = $FixtureHome; $env:GIT_CONFIG_GLOBAL = Join-Path $FixtureHome ".gitconfig"
     $ErrorActionPreference = "Continue"
     $CommandArguments = @(
       "-NoProfile", "-File", $PublishScript,
