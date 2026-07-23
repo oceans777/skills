@@ -44,6 +44,12 @@ add_failure() {
   failures=$((failures + 1))
 }
 
+valid_commit_sha() {
+  value=$1
+  case "$value" in ''|*[!0-9a-f]*) return 1 ;; esac
+  [ "${#value}" -eq 40 ]
+}
+
 test_skill_path() {
   repository_name=$1
   skill_name=$2
@@ -126,7 +132,14 @@ if [ "$WITHOUT_CATALOG" -eq 0 ]; then
   for record_path in "$CATALOG_ROOT/skills"/*.skill; do
     [ -f "$record_path" ] || continue
     skill_name=${record_path##*/}; skill_name=${skill_name%.skill}
+    upstream_commit=$(oceans_catalog_record_value "$record_path" upstream_commit || true)
     candidate_commit=$(oceans_catalog_record_value "$record_path" candidate_upstream_commit || true)
+    if [ -n "$upstream_commit" ] && ! valid_commit_sha "$upstream_commit"; then
+      add_failure "Invalid upstream commit for $skill_name: expected exactly 40 lowercase hexadecimal characters"
+    fi
+    if [ -n "$candidate_commit" ] && ! valid_commit_sha "$candidate_commit"; then
+      add_failure "Invalid candidate commit for $skill_name: expected exactly 40 lowercase hexadecimal characters"
+    fi
     [ -n "$candidate_commit" ] || continue
     package_repository=$(oceans_catalog_record_value "$record_path" package_repository || true)
     candidate_path=$(oceans_catalog_review_path "$CATALOG_ROOT" "$package_repository" "$skill_name")
