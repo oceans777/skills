@@ -16,26 +16,10 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-          show-progress: false
       - name: Validate skills
-        shell: bash
-        run: |
-          set -o pipefail
-          ./oceans validate 2>&1 | tee validate.log
+        run: ./oceans validate
       - name: Run shell tests
-        shell: bash
-        run: |
-          set -o pipefail
-          ./oceans test 2>&1 | tee test.log
-      - name: Upload failure logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: shell-${{ matrix.os }}-failure-logs
-          path: |
-            validate.log
-            test.log
-          if-no-files-found: ignore
+        run: ./oceans test
 
   powershell:
     name: PowerShell (windows-latest)
@@ -44,23 +28,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
-          show-progress: false
       - name: Validate skills
         shell: pwsh
-        run: |
-          .\oceans.ps1 validate *>&1 | Tee-Object -FilePath validate.log
-          if (-not $?) { exit 1 }
+        run: .\oceans.ps1 validate
       - name: Run PowerShell tests
         shell: pwsh
-        run: |
-          .\oceans.ps1 test *>&1 | Tee-Object -FilePath test.log
-          if (-not $?) { exit 1 }
-      - name: Upload failure logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: powershell-windows-failure-logs
-          path: |
-            validate.log
-            test.log
-          if-no-files-found: ignore
+        run: .\oceans.ps1 test
