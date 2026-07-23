@@ -16,6 +16,7 @@ CATALOG_ROOT=$REPO_ROOT/catalog
 CATALOG_EXPLICIT=0
 CUSTOM_SOURCE_ROOTS=0
 WITHOUT_CATALOG=0
+RECONCILE_ONLY=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -26,6 +27,7 @@ while [ "$#" -gt 0 ]; do
     --community-root|--community-skills-root) [ "$#" -ge 2 ] || { echo "$1 needs a path." >&2; exit 2; }; COMMUNITY_SKILLS_ROOT=$2; CUSTOM_SOURCE_ROOTS=1; shift 2 ;;
     --catalog-root) [ "$#" -ge 2 ] || { echo "--catalog-root needs a path." >&2; exit 2; }; CATALOG_ROOT=$2; CATALOG_EXPLICIT=1; shift 2 ;;
     --without-catalog) WITHOUT_CATALOG=1; shift ;;
+    --reconcile-only) RECONCILE_ONLY=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -36,6 +38,10 @@ if [ "$CUSTOM_SOURCE_ROOTS" -eq 1 ] && [ "$CATALOG_EXPLICIT" -eq 0 ] && [ "$WITH
 fi
 if [ "$WITHOUT_CATALOG" -eq 1 ] && [ "$CATALOG_EXPLICIT" -eq 1 ]; then
   echo "--without-catalog cannot be combined with --catalog-root." >&2
+  exit 2
+fi
+if [ "$RECONCILE_ONLY" -eq 1 ] && [ "$WITHOUT_CATALOG" -eq 1 ]; then
+  echo "--reconcile-only requires lifecycle catalog governance." >&2
   exit 2
 fi
 
@@ -90,7 +96,11 @@ elif [ "$ALL_EXISTING_RUNTIMES" -eq 1 ]; then
 else
   add_first_existing_runtime_target "$RUNTIME" 1
 fi
-[ -s "$INSTALL_TARGETS_FILE" ] || { echo "No existing runtime skill roots found for install." >&2; exit 1; }
+if [ ! -s "$INSTALL_TARGETS_FILE" ]; then
+  if [ "$RECONCILE_ONLY" -eq 1 ]; then echo "runtime-reconcile: no-existing-roots"; exit 0; fi
+  echo "No existing runtime skill roots found for install." >&2
+  exit 1
+fi
 
 marker_value() {
   marker=$1; key=$2
@@ -149,15 +159,26 @@ reconcile_managed_skills() {
   install_root_real=$1
   [ "$CATALOG_ENABLED" -eq 1 ] || return 0
   disabled_root=$(managed_disabled_root "$install_root_real") || return 1
+  blocked_unmanaged=0
   for installed_path in "$install_root_real"/*; do
     [ -d "$installed_path" ] || continue
-    [ ! -L "$installed_path" ] || continue
     skill_name=${installed_path##*/}
+    state=$(oceans_catalog_state_for_skill "$CATALOG_ROOT" "$skill_name" 2>/dev/null || true)
+    [ -n "$state" ] || continue
+
     marker=$installed_path/.oceans-skill-source
-    [ -f "$marker" ] || continue
-    existing_source=$(marker_value "$marker" source_repository)
-    is_known_oceans_source "$existing_source" || continue
-    if state=$(catalog_status_for_skill "$skill_name"); then :; else continue; fi
+    existing_source=
+    [ ! -f "$marker" ] || existing_source=$(marker_value "$marker" source_repository)
+    managed=0
+    if [ ! -L "$installed_path" ] && is_known_oceans_source "$existing_source"; then managed=1; fi
+
+    if [ "$state" = blocked ] && [ "$managed" -eq 0 ]; then
+      echo "WARNING: Blocked skill has an unmanaged local copy that cannot be disabled automatically: $installed_path" >&2
+      blocked_unmanaged=1
+      continue
+    fi
+    [ "$managed" -eq 1 ] || continue
+
     case "$state" in
       archived|blocked|pending-review)
         preserve_disabled_skill "$installed_path" "$disabled_root" "$state" "$skill_name"
@@ -167,6 +188,10 @@ reconcile_managed_skills() {
         ;;
     esac
   done
+  if [ "$blocked_unmanaged" -ne 0 ]; then
+    echo "blocked-unmanaged-conflict: manually remove or rename the listed local copies before treating the block as enforced." >&2
+    return 1
+  fi
 }
 
 report_catalog_only_pending() {
@@ -258,6 +283,10 @@ while IFS='|' read -r target_runtime install_root_real; do
   [ -n "$target_runtime" ] || continue
   reconcile_managed_skills "$install_root_real"
   report_catalog_only_pending
+  if [ "$RECONCILE_ONLY" -eq 1 ]; then
+    echo "Reconciled lifecycle state for install root: $install_root_real"
+    continue
+  fi
   install_from_repository oceans-skills "$FIRST_PARTY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
   install_from_repository community-skills "$COMMUNITY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
   echo "Install root: $install_root_real"
