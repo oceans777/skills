@@ -25,8 +25,8 @@ jobs:
       - name: Run shell tests
         run: ./oceans test
 
-  powershell:
-    name: PowerShell (windows-latest)
+  powershell-validation:
+    name: PowerShell validation (windows-latest)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -49,6 +49,23 @@ jobs:
       - name: Validate skills
         shell: pwsh
         run: .\oceans.ps1 validate
-      - name: Run PowerShell tests
+
+  powershell-tests:
+    name: PowerShell test (${{ matrix.test }})
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - test-add-skill-from-url.ps1
+          - test-install-local-first.ps1
+          - test-publish-skills.ps1
+          - test-skill-catalog.ps1
+          - test-validate-duplicates.ps1
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Run PowerShell test
         shell: pwsh
-        run: .\oceans.ps1 test
+        run: '& ".\scripts\${{ matrix.test }}"'
