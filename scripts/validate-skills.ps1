@@ -1,29 +1,25 @@
 param(
   [string] $FirstPartySkillsRoot,
-  [string] $CommunitySkillsRoot
+  [string] $CommunitySkillsRoot,
+  [string] $CatalogRoot
 )
 
 $ErrorActionPreference = "Stop"
-
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $ScriptRoot "skill-publish-rules.ps1")
+. (Join-Path $ScriptRoot "skill-catalog.ps1")
 $Failures = New-Object System.Collections.Generic.List[string]
+$CustomSourceRoots = $PSBoundParameters.ContainsKey("FirstPartySkillsRoot") -or $PSBoundParameters.ContainsKey("CommunitySkillsRoot")
+$CatalogExplicit = $PSBoundParameters.ContainsKey("CatalogRoot")
 
-if (-not $FirstPartySkillsRoot) {
-  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
-}
-
-if (-not $CommunitySkillsRoot) {
-  $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills"
-}
+if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills" }
+if (-not $CommunitySkillsRoot) { $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills" }
+if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
+$CatalogEnabled = -not ($CustomSourceRoots -and -not $CatalogExplicit)
 
 function Test-SkillDirectory {
-  param(
-    [string] $RepositoryName,
-    [string] $SkillsPath,
-    [bool] $RequireUpstream
-  )
+  param([string] $RepositoryName, [string] $SkillsPath, [bool] $RequireUpstream)
 
   if (-not (Test-Path -LiteralPath $SkillsPath)) {
     $Failures.Add("Missing skills path: $SkillsPath")
@@ -36,16 +32,11 @@ function Test-SkillDirectory {
     }
 
     $IsSkillReparsePoint = (($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
-    if ($IsSkillReparsePoint) {
-      $Failures.Add("Unsupported symlink in ${RepositoryName}: $($_.Name)")
-    }
-
+    if ($IsSkillReparsePoint) { $Failures.Add("Unsupported symlink in ${RepositoryName}: $($_.Name)") }
     if (-not $IsSkillReparsePoint) {
       Get-OceansSkillItemsNoFollow -SkillPath $_.FullName |
         Where-Object { ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 } |
-        ForEach-Object {
-          $Failures.Add("Unsupported symlink in ${RepositoryName}: $($_.FullName)")
-        }
+        ForEach-Object { $Failures.Add("Unsupported symlink in ${RepositoryName}: $($_.FullName)") }
     }
 
     if (-not (Test-Path -LiteralPath (Join-Path $_.FullName "SKILL.md") -PathType Leaf)) {
@@ -67,8 +58,7 @@ function Test-SkillDirectory {
         if (Test-Path -LiteralPath $RequiredPath -PathType Leaf) {
           $RequiredContent = [string](Get-Content -LiteralPath $RequiredPath -Raw)
         }
-        if (-not (Test-Path -LiteralPath $RequiredPath -PathType Leaf) -or
-            $RequiredContent.Trim().Length -eq 0) {
+        if (-not (Test-Path -LiteralPath $RequiredPath -PathType Leaf) -or $RequiredContent.Trim().Length -eq 0) {
           $Failures.Add("Missing or empty $Required in ${RepositoryName}: $($_.Name)")
         }
       }
@@ -78,29 +68,25 @@ function Test-SkillDirectory {
 
 function Get-SkillNames {
   param([string] $SkillsPath)
-
-  if (-not (Test-Path -LiteralPath $SkillsPath)) {
-    return @()
-  }
-
+  if (-not (Test-Path -LiteralPath $SkillsPath)) { return @() }
   return @(Get-ChildItem -LiteralPath $SkillsPath -Directory | ForEach-Object { $_.Name })
 }
 
-Test-SkillDirectory `
-  -RepositoryName "oceans-skills" `
-  -SkillsPath $FirstPartySkillsRoot `
-  -RequireUpstream $false
-
-Test-SkillDirectory `
-  -RepositoryName "community-skills" `
-  -SkillsPath $CommunitySkillsRoot `
-  -RequireUpstream $true
+Test-SkillDirectory -RepositoryName "oceans-skills" -SkillsPath $FirstPartySkillsRoot -RequireUpstream $false
+Test-SkillDirectory -RepositoryName "community-skills" -SkillsPath $CommunitySkillsRoot -RequireUpstream $true
 
 $FirstPartyNames = Get-SkillNames -SkillsPath $FirstPartySkillsRoot
 $CommunityNames = Get-SkillNames -SkillsPath $CommunitySkillsRoot
 foreach ($Name in $FirstPartyNames) {
-  if ($CommunityNames -contains $Name) {
-    $Failures.Add("Duplicate skill name across repositories: $Name")
+  if ($CommunityNames -contains $Name) { $Failures.Add("Duplicate skill name across repositories: $Name") }
+}
+
+if ($CatalogEnabled) {
+  foreach ($Issue in @(Get-OceansCatalogValidationIssues `
+      -CatalogRoot $CatalogRoot `
+      -FirstPartySkillsRoot $FirstPartySkillsRoot `
+      -CommunitySkillsRoot $CommunitySkillsRoot)) {
+    $Failures.Add($Issue)
   }
 }
 
