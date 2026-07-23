@@ -216,6 +216,7 @@ try {
   if ($Links.Count -gt 0) { throw "Candidate contains unsupported symlinks: $SkillName" }
   $Risks = @(Get-OceansSkillRiskNotes -SkillPath $PreparedSkill)
   if ($Risks.Count -gt 0 -and -not $AllowRisk) { throw "risk-blocked: $SkillName`n$($Risks -join [Environment]::NewLine)" }
+  $CandidateContentSha256 = Get-OceansSkillContentSha256 -SkillPath $PreparedSkill
 
   $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $SkillName
   if ((Test-Path -LiteralPath $RecordPath -PathType Leaf) -and -not $ReplaceExisting) {
@@ -227,6 +228,7 @@ try {
     Write-Host "candidate-plan-skill: $SkillName"
     Write-Host "candidate-plan-repository: $PackageRepository"
     Write-Host "candidate-plan-source: $UpstreamRepository@$SourceCommit"
+    Write-Host "candidate-plan-content-sha256: $CandidateContentSha256"
     Write-Host "candidate-plan-files: $($IncludedFiles.Count)"
     Write-Host "candidate-plan-bytes: $TotalBytes"
     exit 0
@@ -268,10 +270,12 @@ try {
       -UpstreamPath ([string]$ExistingRecord["upstream_path"]) `
       -UpstreamRef ([string]$ExistingRecord["upstream_ref"]) `
       -UpstreamCommit ([string]$ExistingRecord["upstream_commit"]) `
+      -ContentSha256 ([string]$ExistingRecord["content_sha256"]) `
       -CandidateUpstreamRepository $UpstreamRepository -CandidateUpstreamPath $UrlSkillPath `
       -CandidateUpstreamRef $ResolvedSourceRef -CandidateUpstreamCommit $SourceCommit `
+      -CandidateContentSha256 $CandidateContentSha256 `
       -Replacement ([string]$ExistingRecord["replacement"]) -StatusReason ([string]$ExistingRecord["status_reason"]) `
-      -TransitionNote "queued candidate $SourceCommit" | Out-Null
+      -TransitionNote "queued candidate $SourceCommit with content $CandidateContentSha256" | Out-Null
   } catch {
     if (Test-Path -LiteralPath $BackupPath -PathType Container) {
       $RestoreStage = New-OceansStagingDirectory -TargetPath $ReviewPath
@@ -286,6 +290,7 @@ try {
   Write-Host "candidate-added: $SkillName"
   Write-Host "catalog-state: $CurrentStatus"
   Write-Host "candidate-commit: $SourceCommit"
+  Write-Host "candidate-content-sha256: $CandidateContentSha256"
   if ($Existing) { Write-Host "active-package-preserved: $SkillName" }
   Write-Host "next: review catalog/review-queue/$PackageRepository/$SkillName, then run .\oceans.ps1 catalog -Action activate -Skill $SkillName"
 } finally {
