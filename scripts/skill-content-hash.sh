@@ -30,8 +30,9 @@ oceans_skill_content_sha256() {
   while IFS= read -r file; do
     [ -n "$file" ] || continue
     relative=${file#"$root"/}
+    path_hex=$(printf '%s' "$relative" | od -An -tx1 | tr -d ' \n')
     file_hash=$(oceans_sha256_file "$file") || { rm -f "$manifest" "$unsorted" "$files"; return 1; }
-    printf '%s  %s\n' "$file_hash" "$relative" >> "$unsorted"
+    printf '%s %s\n' "$path_hex" "$file_hash" >> "$unsorted"
   done < "$files"
   LC_ALL=C sort "$unsorted" > "$manifest"
   digest=$(oceans_sha256_file "$manifest") || { rm -f "$manifest" "$unsorted" "$files"; return 1; }
