@@ -1,0 +1,16 @@
+schema_version=2
+name=experience-triage
+status=active
+package_repository=oceans-skills
+upstream_repository=https://github.com/oceans777/oceans-skills
+upstream_path=skills/experience-triage
+upstream_ref=main
+upstream_commit=0f04051546b5159fe0a71f79b0a5828bcde57948
+candidate_upstream_repository=
+candidate_upstream_path=
+candidate_upstream_ref=
+candidate_upstream_commit=
+replacement=
+status_reason=
+transition_note=initial catalog migration
+updated_at=2026-07-23T00:00:00Z
