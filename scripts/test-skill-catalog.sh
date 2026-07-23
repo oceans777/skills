@@ -108,12 +108,17 @@ sh "$REPO_ROOT/scripts/catalog-skill.sh" reject --catalog-root "$CATALOG" --firs
 [ ! -e "$OCEANS_PENDING" ] || fail "Rejected new skill record remains."
 [ ! -e "$CATALOG/review-queue/oceans-skills/pending-skill" ] || fail "Rejected new skill candidate remains."
 
-# Strict schema rejects unknown fields, and active operations respect catalog locks.
+# Strict schema and exact SHA length fail closed; active operations respect catalog locks.
 RECORD=$(oceans_catalog_record_path "$CATALOG" active-skill)
 cp "$RECORD" "$TEST_ROOT/record-backup"
 printf '%s\n' unknown_field=value >> "$RECORD"
 if sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG" >/dev/null 2>"$TEST_ROOT/schema-error"; then fail "Unknown catalog field passed validation."; fi
 assert_file_contains "$TEST_ROOT/schema-error" "Unknown catalog key"
+cp "$TEST_ROOT/record-backup" "$RECORD"
+sed 's/^upstream_commit=.*/upstream_commit=abc123/' "$RECORD" > "$TEST_ROOT/short-sha-record"
+mv "$TEST_ROOT/short-sha-record" "$RECORD"
+if sh "$REPO_ROOT/scripts/validate-skills.sh" --first-party-root "$FIRST" --community-root "$COMMUNITY" --catalog-root "$CATALOG" >/dev/null 2>"$TEST_ROOT/short-sha-error"; then fail "Short commit hash passed validation."; fi
+assert_file_contains "$TEST_ROOT/short-sha-error" "expected exactly 40 lowercase hexadecimal characters"
 cp "$TEST_ROOT/record-backup" "$RECORD"
 mkdir -p "$CATALOG/.locks/active-skill.lock"
 if sh "$REPO_ROOT/scripts/catalog-skill.sh" deprecate --catalog-root "$CATALOG" --skill active-skill --reason locked >/dev/null 2>&1; then fail "Concurrent catalog mutation ignored lock."; fi
