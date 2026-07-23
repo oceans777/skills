@@ -1,3 +1,7 @@
+if (-not (Get-Command Get-OceansIncludedSkillFiles -ErrorAction SilentlyContinue)) {
+  . (Join-Path $PSScriptRoot "skill-publish-rules.ps1")
+}
+
 function Get-OceansSkillContentSha256 {
   param([Parameter(Mandatory = $true)][string] $SkillPath)
 
