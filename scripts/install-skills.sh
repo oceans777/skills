@@ -116,13 +116,18 @@ managed_disabled_root() {
   install_root_real=$1
   parent=$(dirname "$install_root_real")
   leaf=$(basename "$install_root_real")
-  printf '%s/.oceans-disabled/%s\n' "$parent" "$leaf"
+  disabled_base=$parent/.oceans-disabled
+  [ ! -L "$disabled_base" ] || { echo "Refusing unsafe disabled base: $disabled_base" >&2; return 1; }
+  [ ! -e "$disabled_base" ] || [ -d "$disabled_base" ] || { echo "Disabled base is not a directory: $disabled_base" >&2; return 1; }
+  disabled_root=$disabled_base/$leaf
+  [ ! -L "$disabled_root" ] || { echo "Refusing unsafe disabled root: $disabled_root" >&2; return 1; }
+  [ ! -e "$disabled_root" ] || [ -d "$disabled_root" ] || { echo "Disabled root is not a directory: $disabled_root" >&2; return 1; }
+  printf '%s\n' "$disabled_root"
 }
 
 preserve_disabled_skill() {
   source_path=$1; disabled_root=$2; state=$3; skill_name=$4
   [ ! -L "$source_path" ] || { echo "Refusing to disable symlinked managed skill: $skill_name" >&2; return 1; }
-  [ ! -L "$disabled_root" ] || { echo "Refusing unsafe disabled root: $disabled_root" >&2; return 1; }
   destination=$disabled_root/$state/$skill_name
   staging=$(oceans_new_staging_directory "$destination") || return 1
   if ! cp -R "$source_path"/. "$staging"; then rm -rf "$staging"; return 1; fi
@@ -143,7 +148,7 @@ remove_disabled_copies() {
 reconcile_managed_skills() {
   install_root_real=$1
   [ "$CATALOG_ENABLED" -eq 1 ] || return 0
-  disabled_root=$(managed_disabled_root "$install_root_real")
+  disabled_root=$(managed_disabled_root "$install_root_real") || return 1
   for installed_path in "$install_root_real"/*; do
     [ -d "$installed_path" ] || continue
     [ ! -L "$installed_path" ] || continue
@@ -164,6 +169,18 @@ reconcile_managed_skills() {
   done
 }
 
+report_catalog_only_pending() {
+  [ "$CATALOG_ENABLED" -eq 1 ] || return 0
+  for record_path in "$CATALOG_ROOT/skills"/*.skill; do
+    [ -f "$record_path" ] || continue
+    status=$(oceans_catalog_record_value "$record_path" status || true)
+    [ "$status" = pending-review ] || continue
+    skill_name=$(oceans_catalog_record_value "$record_path" name || true)
+    [ -n "$skill_name" ] || continue
+    echo "Skipped pending-review skill: $skill_name"
+  done
+}
+
 catalog_allows_install() {
   repository_name=$1; skill_name=$2
   [ "$CATALOG_ENABLED" -eq 1 ] || return 0
@@ -181,7 +198,7 @@ catalog_allows_install() {
 install_from_repository() {
   repository_name=$1; source_path=$2; runtime=$3; install_root_real=$4
   if [ ! -d "$source_path" ]; then echo "Skipping missing source: $source_path"; return; fi
-  disabled_root=$(managed_disabled_root "$install_root_real")
+  disabled_root=$(managed_disabled_root "$install_root_real") || return 1
 
   for skill_path in "$source_path"/*; do
     [ -d "$skill_path" ] || continue
@@ -240,6 +257,7 @@ install_from_repository() {
 while IFS='|' read -r target_runtime install_root_real; do
   [ -n "$target_runtime" ] || continue
   reconcile_managed_skills "$install_root_real"
+  report_catalog_only_pending
   install_from_repository oceans-skills "$FIRST_PARTY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
   install_from_repository community-skills "$COMMUNITY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
   echo "Install root: $install_root_real"
