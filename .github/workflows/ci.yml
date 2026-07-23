@@ -26,11 +26,11 @@ jobs:
     name: PowerShell debug (windows-latest)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-        with:
-          show-progress: false
-          persist-credentials: false
-          set-safe-directory: false
-      - name: Run isolated PowerShell test
+      - name: Fetch and run isolated PowerShell test
         shell: pwsh
-        run: .\scripts\test-add-skill-from-url.ps1
+        run: |
+          git init -q $env:GITHUB_WORKSPACE
+          git -C $env:GITHUB_WORKSPACE remote add origin "https://github.com/$env:GITHUB_REPOSITORY.git"
+          git -C $env:GITHUB_WORKSPACE fetch -q --depth 1 origin $env:GITHUB_SHA
+          git -C $env:GITHUB_WORKSPACE checkout -q FETCH_HEAD
+          & "$env:GITHUB_WORKSPACE\scripts\test-add-skill-from-url.ps1"
