@@ -78,6 +78,8 @@ load_record() {
   CANDIDATE_PATH=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_path || true)
   CANDIDATE_REF=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_ref || true)
   CANDIDATE_COMMIT=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_commit || true)
+  CONTENT_SHA256=$(oceans_catalog_record_value "$RECORD_PATH" content_sha256 || true)
+  CANDIDATE_CONTENT_SHA256=$(oceans_catalog_record_value "$RECORD_PATH" candidate_content_sha256 || true)
   CURRENT_REPLACEMENT=$(oceans_catalog_record_value "$RECORD_PATH" replacement || true)
   CURRENT_STATUS_REASON=$(oceans_catalog_record_value "$RECORD_PATH" status_reason || true)
 }
@@ -130,6 +132,13 @@ validate_candidate() {
       [ -s "$candidate_root/$required" ] || { echo "Candidate is missing $required: $SKILL" >&2; return 1; }
     done
   fi
+  oceans_valid_sha256 "$CANDIDATE_CONTENT_SHA256" || { echo "Candidate content SHA-256 is missing or invalid: $SKILL" >&2; return 1; }
+  actual_candidate_sha256=$(oceans_skill_content_sha256 "$candidate_root") || return 1
+  [ "$actual_candidate_sha256" = "$CANDIDATE_CONTENT_SHA256" ] || {
+    echo "Candidate content changed after intake: $SKILL. Expected $CANDIDATE_CONTENT_SHA256, got $actual_candidate_sha256" >&2
+    return 1
+  }
+  printf '%s\n' "$actual_candidate_sha256"
 }
 
 restore_target_from_backup() {
@@ -157,7 +166,7 @@ promote_candidate() {
   case "$STATUS" in pending-review|active) ;; *) echo "catalog-transition-not-allowed: $STATUS -> active" >&2; exit 1 ;; esac
   [ -n "$CANDIDATE_COMMIT" ] || { echo "catalog-candidate-not-found: $SKILL" >&2; exit 1; }
   REVIEW_PATH=$(oceans_catalog_review_path "$CATALOG_ROOT" "$PACKAGE_REPOSITORY" "$SKILL")
-  validate_candidate "$REVIEW_PATH"
+  expected_content_sha256=$(validate_candidate "$REVIEW_PATH") || exit 1
 
   case "$PACKAGE_REPOSITORY" in
     oceans-skills) target_root=$FIRST_PARTY_ROOT ;;
@@ -182,11 +191,16 @@ promote_candidate() {
     mv "$review_hold" "$REVIEW_PATH"
     exit 1
   }
-  if cp -R "$review_hold"/. "$staging_path" && oceans_remove_excluded_paths "$staging_path" && oceans_commit_staged_directory "$staging_path" "$target_path"; then
-    if oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" active "$PACKAGE_REPOSITORY" \
-      "$CANDIDATE_REPOSITORY" "$CANDIDATE_PATH" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
-      "" "" "" "" "" "" "activated reviewed candidate $CANDIDATE_COMMIT"; then
-      promotion_ok=1
+  if cp -R "$review_hold"/. "$staging_path" && oceans_remove_excluded_paths "$staging_path"; then
+    staged_content_sha256=$(oceans_skill_content_sha256 "$staging_path" || true)
+    if [ "$staged_content_sha256" = "$expected_content_sha256" ] && oceans_commit_staged_directory "$staging_path" "$target_path"; then
+      published_content_sha256=$(oceans_skill_content_sha256 "$target_path" || true)
+      if [ "$published_content_sha256" = "$expected_content_sha256" ] && oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" active "$PACKAGE_REPOSITORY" \
+        "$CANDIDATE_REPOSITORY" "$CANDIDATE_PATH" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+        "" "" "" "" "" "" "activated reviewed candidate $CANDIDATE_COMMIT with content $published_content_sha256" \
+        "$published_content_sha256" ""; then
+        promotion_ok=1
+      fi
     fi
   fi
 
@@ -195,6 +209,7 @@ promote_candidate() {
     echo "catalog-state: active"
     echo "skill: $SKILL"
     echo "activated-commit: $CANDIDATE_COMMIT"
+    echo "activated-content-sha256: $expected_content_sha256"
     return
   fi
 
@@ -221,7 +236,8 @@ reject_candidate() {
     fi
   elif oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" "$STATUS" "$PACKAGE_REPOSITORY" \
     "$UPSTREAM_REPOSITORY" "$UPSTREAM_PATH" "$UPSTREAM_REF" "$UPSTREAM_COMMIT" \
-    "" "" "" "" "$CURRENT_REPLACEMENT" "$CURRENT_STATUS_REASON" "rejected candidate $CANDIDATE_COMMIT"; then
+    "" "" "" "" "$CURRENT_REPLACEMENT" "$CURRENT_STATUS_REASON" "rejected candidate $CANDIDATE_COMMIT" \
+    "$CONTENT_SHA256" ""; then
     remove_hold_best_effort "$review_hold"
     echo "catalog-candidate-rejected: $SKILL"
     echo "catalog-state: $STATUS"
@@ -261,7 +277,7 @@ transition_status() {
 
   oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" "$target_status" "$PACKAGE_REPOSITORY" \
     "$UPSTREAM_REPOSITORY" "$UPSTREAM_PATH" "$UPSTREAM_REF" "$UPSTREAM_COMMIT" \
-    "" "" "" "" "$replacement" "$status_reason" "$transition_note"
+    "" "" "" "" "$replacement" "$status_reason" "$transition_note" "$CONTENT_SHA256" ""
   reconcile_runtime "$target_status"
   echo "catalog-state: $target_status"
   echo "skill: $SKILL"
