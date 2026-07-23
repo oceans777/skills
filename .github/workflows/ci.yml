@@ -29,6 +29,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           show-progress: false
+          persist-credentials: false
+          set-safe-directory: false
       - name: Run isolated PowerShell test
         shell: pwsh
         run: .\scripts\test-add-skill-from-url.ps1
