@@ -64,10 +64,15 @@ done
 case "$TARGET" in oceans|community) ;; *) echo "Unsupported target: $TARGET" >&2; exit 2 ;; esac
 case "$MAX_FILES:$MAX_BYTES" in *[!0-9:]*|:*|*:) echo "Intake budgets must be positive integers." >&2; exit 2 ;; esac
 [ "$MAX_FILES" -gt 0 ] && [ "$MAX_BYTES" -gt 0 ] || { echo "Intake budgets must be positive integers." >&2; exit 2; }
+if [ -n "$LOCAL_REPOSITORY" ] && [ "${OCEANS_TEST_MODE:-0}" != 1 ]; then
+  echo "--local-repository is test-only and requires OCEANS_TEST_MODE=1." >&2
+  exit 2
+fi
 
 clean_url=${URL%%\?*}
 clean_url=${clean_url%%\#*}
 clean_url=${clean_url%/}
+case "$clean_url" in *%*) echo "Percent-encoded GitHub paths are not accepted; provide the canonical visible URL." >&2; exit 1 ;; esac
 case "$clean_url" in https://github.com/*/*) ;; *) echo "Only https://github.com skill URLs are supported." >&2; exit 1 ;; esac
 
 url_tail=${clean_url#https://github.com/}
