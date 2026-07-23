@@ -5,70 +5,61 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 . "$SCRIPT_DIR/directory-transaction.sh"
+. "$SCRIPT_DIR/skill-catalog.sh"
 
 INSTALL_ROOT=
 RUNTIME=codex
 ALL_EXISTING_RUNTIMES=0
 FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_SKILLS_ROOT=$REPO_ROOT/repos/community-skills/skills
+CATALOG_ROOT=$REPO_ROOT/catalog
+CATALOG_EXPLICIT=0
+CUSTOM_SOURCE_ROOTS=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --install-root)
-      if [ "$#" -lt 2 ]; then
-        echo "--install-root needs a path." >&2
-        exit 2
-      fi
-      INSTALL_ROOT=$2
-      shift 2
-      ;;
+      [ "$#" -ge 2 ] || { echo "--install-root needs a path." >&2; exit 2; }
+      INSTALL_ROOT=$2; shift 2 ;;
     --runtime)
-      if [ "$#" -lt 2 ]; then
-        echo "--runtime needs a value." >&2
-        exit 2
-      fi
-      RUNTIME=$2
-      shift 2
-      ;;
-    --all-existing-runtimes)
-      ALL_EXISTING_RUNTIMES=1
-      shift
-      ;;
+      [ "$#" -ge 2 ] || { echo "--runtime needs a value." >&2; exit 2; }
+      RUNTIME=$2; shift 2 ;;
+    --all-existing-runtimes) ALL_EXISTING_RUNTIMES=1; shift ;;
     --first-party-root)
-      if [ "$#" -lt 2 ]; then
-        echo "--first-party-root needs a path." >&2
-        exit 2
-      fi
-      FIRST_PARTY_SKILLS_ROOT=$2
-      shift 2
-      ;;
+      [ "$#" -ge 2 ] || { echo "--first-party-root needs a path." >&2; exit 2; }
+      FIRST_PARTY_SKILLS_ROOT=$2; CUSTOM_SOURCE_ROOTS=1; shift 2 ;;
     --community-root)
-      if [ "$#" -lt 2 ]; then
-        echo "--community-root needs a path." >&2
-        exit 2
-      fi
-      COMMUNITY_SKILLS_ROOT=$2
-      shift 2
-      ;;
-    *)
-      echo "Unknown option: $1" >&2
-      exit 2
-      ;;
+      [ "$#" -ge 2 ] || { echo "--community-root needs a path." >&2; exit 2; }
+      COMMUNITY_SKILLS_ROOT=$2; CUSTOM_SOURCE_ROOTS=1; shift 2 ;;
+    --catalog-root)
+      [ "$#" -ge 2 ] || { echo "--catalog-root needs a path." >&2; exit 2; }
+      CATALOG_ROOT=$2; CATALOG_EXPLICIT=1; shift 2 ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
-if ! sh "$SCRIPT_DIR/validate-skills.sh" \
-  --first-party-root "$FIRST_PARTY_SKILLS_ROOT" \
-  --community-root "$COMMUNITY_SKILLS_ROOT" >/dev/null; then
-  echo "Refusing to install from an invalid or unsafe skill repository." >&2
-  exit 1
+CATALOG_ENABLED=1
+if [ "$CUSTOM_SOURCE_ROOTS" -eq 1 ] && [ "$CATALOG_EXPLICIT" -eq 0 ]; then CATALOG_ENABLED=0; fi
+
+if [ "$CATALOG_ENABLED" -eq 1 ]; then
+  if ! sh "$SCRIPT_DIR/validate-skills.sh" \
+    --first-party-root "$FIRST_PARTY_SKILLS_ROOT" \
+    --community-root "$COMMUNITY_SKILLS_ROOT" \
+    --catalog-root "$CATALOG_ROOT" >/dev/null; then
+    echo "Refusing to install from an invalid or unsafe skill repository." >&2
+    exit 1
+  fi
+else
+  if ! sh "$SCRIPT_DIR/validate-skills.sh" \
+    --first-party-root "$FIRST_PARTY_SKILLS_ROOT" \
+    --community-root "$COMMUNITY_SKILLS_ROOT" >/dev/null; then
+    echo "Refusing to install from an invalid or unsafe skill repository." >&2
+    exit 1
+  fi
 fi
 
 INSTALL_TARGETS_FILE=$(mktemp "${TMPDIR:-/tmp}/oceans-install-targets.XXXXXX") || exit 1
-
-cleanup_install_targets() {
-  rm -f "$INSTALL_TARGETS_FILE"
-}
+cleanup_install_targets() { rm -f "$INSTALL_TARGETS_FILE"; }
 trap 'cleanup_install_targets' EXIT
 trap 'cleanup_install_targets; exit 129' HUP
 trap 'cleanup_install_targets; exit 130' INT
@@ -78,16 +69,8 @@ add_install_target() {
   runtime=$1
   install_root=$2
   create=$3
-
-  if [ "$create" -eq 1 ]; then
-    mkdir -p "$install_root"
-  fi
-
-  if [ ! -d "$install_root" ]; then
-    echo "Install root does not exist: $install_root" >&2
-    exit 1
-  fi
-
+  [ "$create" -eq 0 ] || mkdir -p "$install_root"
+  [ -d "$install_root" ] || { echo "Install root does not exist: $install_root" >&2; exit 1; }
   install_root_real=$(absolute_path "$install_root")
   printf '%s|%s\n' "$runtime" "$install_root_real" >> "$INSTALL_TARGETS_FILE"
 }
@@ -95,31 +78,18 @@ add_install_target() {
 add_first_existing_runtime_target() {
   runtime=$1
   create=$2
-
-  if [ "$runtime" = "custom" ]; then
-    echo "custom-runtime-requires-path" >&2
-    exit 1
-  fi
-
+  [ "$runtime" != custom ] || { echo "custom-runtime-requires-path" >&2; exit 1; }
   first=
   candidates=$(runtime_candidates "$runtime")
   while IFS= read -r candidate; do
     [ -n "$candidate" ] || continue
     candidate_real=$(absolute_path "$candidate")
-    if [ -z "$first" ]; then
-      first=$candidate_real
-    fi
-    if [ -d "$candidate_real" ]; then
-      add_install_target "$runtime" "$candidate_real" 0
-      return
-    fi
-  done <<EOF
+    [ -n "$first" ] || first=$candidate_real
+    if [ -d "$candidate_real" ]; then add_install_target "$runtime" "$candidate_real" 0; return; fi
+  done <<EOF_CANDIDATES
 $candidates
-EOF
-
-  if [ "$create" -eq 1 ]; then
-    add_install_target "$runtime" "$first" 1
-  fi
+EOF_CANDIDATES
+  [ "$create" -eq 0 ] || add_install_target "$runtime" "$first" 1
 }
 
 if [ -n "$INSTALL_ROOT" ]; then
@@ -133,10 +103,7 @@ else
   add_first_existing_runtime_target "$RUNTIME" 1
 fi
 
-if [ ! -s "$INSTALL_TARGETS_FILE" ]; then
-  echo "No existing runtime skill roots found for install." >&2
-  exit 1
-fi
+[ -s "$INSTALL_TARGETS_FILE" ] || { echo "No existing runtime skill roots found for install." >&2; exit 1; }
 
 source_repository_from_marker() {
   marker=$1
@@ -145,7 +112,36 @@ source_repository_from_marker() {
 
 is_known_oceans_source() {
   repository=$1
-  [ "$repository" = "oceans-skills" ] || [ "$repository" = "community-skills" ]
+  [ "$repository" = oceans-skills ] || [ "$repository" = community-skills ]
+}
+
+catalog_allows_install() {
+  repository_name=$1
+  skill_name=$2
+  [ "$CATALOG_ENABLED" -eq 1 ] || return 0
+
+  if state=$(oceans_catalog_state_for_skill "$CATALOG_ROOT" "$skill_name"); then
+    :
+  else
+    status=$?
+    if [ "$status" -eq 1 ]; then
+      echo "Missing catalog record: $skill_name" >&2
+    else
+      echo "Skill exists in multiple catalog states: $skill_name" >&2
+    fi
+    return 2
+  fi
+  record_path=$(oceans_catalog_record_path "$CATALOG_ROOT" "$state" "$skill_name")
+  catalog_repository=$(oceans_catalog_record_value "$record_path" repository || true)
+  [ "$catalog_repository" = "$repository_name" ] || {
+    echo "Catalog repository mismatch for $skill_name: $catalog_repository" >&2
+    return 2
+  }
+  if [ "$state" != active ]; then
+    echo "Skipped $state skill: $skill_name"
+    return 1
+  fi
+  return 0
 }
 
 install_from_repository() {
@@ -154,55 +150,32 @@ install_from_repository() {
   runtime=$3
   install_root_real=$4
 
-  if [ ! -d "$source_path" ]; then
-    echo "Skipping missing source: $source_path"
-    return
-  fi
+  if [ ! -d "$source_path" ]; then echo "Skipping missing source: $source_path"; return; fi
 
   for skill_path in "$source_path"/*; do
     [ -d "$skill_path" ] || continue
     skill_name=${skill_path##*/}
+    case "$skill_name" in ''|*[!a-z0-9-]*) echo "Skipping invalid skill folder name in $repository_name: $skill_name" >&2; continue ;; esac
 
-    case "$skill_name" in
-      ''|*[!a-z0-9-]*)
-        echo "Skipping invalid skill folder name in $repository_name: $skill_name" >&2
-        continue
-        ;;
-    esac
+    if catalog_allows_install "$repository_name" "$skill_name"; then
+      :
+    else
+      catalog_status=$?
+      [ "$catalog_status" -eq 1 ] && continue
+      exit 1
+    fi
 
     target=$install_root_real/$skill_name
-    case "$target" in
-      "$install_root_real"/*)
-        ;;
-      *)
-        echo "Refusing to install outside install root: $target" >&2
-        exit 1
-        ;;
-    esac
+    case "$target" in "$install_root_real"/*) ;; *) echo "Refusing to install outside install root: $target" >&2; exit 1 ;; esac
 
-    if [ -L "$target" ]; then
-      echo "duplicate-local-wins: $skill_name"
-      continue
-    fi
+    if [ -L "$target" ]; then echo "duplicate-local-wins: $skill_name"; continue; fi
 
     if [ -e "$target" ]; then
       marker=$target/.oceans-skill-source
-      if [ ! -f "$marker" ]; then
-        echo "duplicate-local-wins: $skill_name"
-        continue
-      fi
-
+      if [ ! -f "$marker" ]; then echo "duplicate-local-wins: $skill_name"; continue; fi
       existing_source=$(source_repository_from_marker "$marker")
-      if ! is_known_oceans_source "$existing_source"; then
-        echo "duplicate-unknown-marker: $skill_name"
-        continue
-      fi
-
-      if [ "$existing_source" != "$repository_name" ]; then
-        echo "duplicate-managed-source-mismatch: $skill_name"
-        continue
-      fi
-
+      if ! is_known_oceans_source "$existing_source"; then echo "duplicate-unknown-marker: $skill_name"; continue; fi
+      if [ "$existing_source" != "$repository_name" ]; then echo "duplicate-managed-source-mismatch: $skill_name"; continue; fi
       is_update=1
     else
       is_update=0
@@ -231,17 +204,13 @@ install_from_repository() {
       echo "Failed to commit skill update; existing installation was restored: $skill_name" >&2
       exit 1
     fi
-    if [ "$is_update" -eq 1 ]; then
-      echo "Updated managed oceans777 skill: $skill_name"
-    else
-      echo "Installed skill: $skill_name"
-    fi
+    if [ "$is_update" -eq 1 ]; then echo "Updated managed oceans777 skill: $skill_name"; else echo "Installed skill: $skill_name"; fi
   done
 }
 
 while IFS='|' read -r target_runtime install_root_real; do
   [ -n "$target_runtime" ] || continue
-  install_from_repository "oceans-skills" "$FIRST_PARTY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
-  install_from_repository "community-skills" "$COMMUNITY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
+  install_from_repository oceans-skills "$FIRST_PARTY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
+  install_from_repository community-skills "$COMMUNITY_SKILLS_ROOT" "$target_runtime" "$install_root_real"
   echo "Install root: $install_root_real"
 done < "$INSTALL_TARGETS_FILE"
