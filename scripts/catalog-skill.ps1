@@ -7,7 +7,9 @@ param(
   [string] $Replacement,
   [string] $CatalogRoot,
   [string] $FirstPartySkillsRoot,
-  [string] $CommunitySkillsRoot
+  [string] $CommunitySkillsRoot,
+  [string] $InstallRoot,
+  [switch] $SkipRuntimeReconcile
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,6 +18,7 @@ $RepoRoot = Split-Path -Parent $ScriptRoot
 . (Join-Path $ScriptRoot "skill-publish-rules.ps1")
 . (Join-Path $ScriptRoot "skill-catalog.ps1")
 . (Join-Path $ScriptRoot "directory-transaction.ps1")
+. (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
 
 if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
 if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills" }
@@ -40,6 +43,37 @@ function Load-Record {
 function Enter-SkillLock {
   Enter-OceansCatalogLock -CatalogRoot $CatalogRoot -SkillName $Skill
   $script:LockHeld = $true
+}
+
+function Invoke-RuntimeReconciliation {
+  param([Parameter(Mandatory = $true)][string] $TargetStatus)
+  if ($SkipRuntimeReconcile) {
+    Write-Host "runtime-reconcile: explicitly-skipped"
+    return
+  }
+
+  $Arguments = @{
+    FirstPartySkillsRoot = $FirstPartySkillsRoot
+    CommunitySkillsRoot = $CommunitySkillsRoot
+    CatalogRoot = $CatalogRoot
+  }
+  if ($InstallRoot) {
+    $Arguments.InstallRoot = $InstallRoot
+  } else {
+    $ExistingRoots = @(Get-OceansExistingSkillRoots)
+    if ($ExistingRoots.Count -eq 0) {
+      Write-Host "runtime-reconcile: no-existing-roots"
+      return
+    }
+    $Arguments.AllExistingRuntimes = $true
+  }
+  if ($TargetStatus -ne "active") { $Arguments.ReconcileOnly = $true }
+
+  try {
+    & (Join-Path $ScriptRoot "install-skills.ps1") @Arguments
+  } catch {
+    throw "Lifecycle state was committed, but runtime reconciliation failed. $($_.Exception.Message)"
+  }
 }
 
 function Assert-CandidateValid {
@@ -202,6 +236,8 @@ function Set-LifecycleStatus {
     -UpstreamRef ([string]$script:Record["upstream_ref"]) `
     -UpstreamCommit ([string]$script:Record["upstream_commit"]) `
     -Replacement $NewReplacement -StatusReason $StatusReason -TransitionNote $TransitionNote | Out-Null
+
+  Invoke-RuntimeReconciliation -TargetStatus $TargetStatus
   Write-Host "catalog-state: $TargetStatus"
   Write-Host "skill: $Skill"
 }
