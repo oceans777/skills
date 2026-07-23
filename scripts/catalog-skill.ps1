@@ -58,6 +58,9 @@ function Invoke-RuntimeReconciliation {
     FirstPartySkillsRoot = $FirstPartySkillsRoot
     CommunitySkillsRoot = $CommunitySkillsRoot
     CatalogRoot = $CatalogRoot
+    TargetSkill = $Skill
+    LifecycleReconcile = $true
+    BestEffortRoots = $true
   }
   if ($InstallRoot) {
     $Arguments.InstallRoot = $InstallRoot
@@ -74,7 +77,7 @@ function Invoke-RuntimeReconciliation {
   try {
     & (Join-Path $ScriptRoot "install-skills.ps1") @Arguments
   } catch {
-    throw "Lifecycle state was committed, but runtime reconciliation failed. $($_.Exception.Message)"
+    throw "Lifecycle state was committed, but one or more runtime roots were not reconciled. $($_.Exception.Message)"
   }
 }
 
@@ -101,6 +104,7 @@ function Assert-CandidateValid {
     }
   }
   if (-not (Test-OceansSha256 -Value $script:CandidateContentSha256)) { throw "Candidate content SHA-256 is missing or invalid: $Skill" }
+  Set-OceansCanonicalSkillPermissions -SkillPath $CandidateRoot
   $ActualCandidateSha256 = Get-OceansSkillContentSha256 -SkillPath $CandidateRoot
   if ($ActualCandidateSha256 -cne $script:CandidateContentSha256) {
     throw "Candidate content changed after intake: $Skill. Expected $($script:CandidateContentSha256), got $ActualCandidateSha256"
@@ -157,6 +161,7 @@ function Promote-Candidate {
     $StagingPath = New-OceansStagingDirectory -TargetPath $TargetPath
     Get-ChildItem -LiteralPath $ReviewHold -Force | Copy-Item -Destination $StagingPath -Recurse -Force
     Remove-OceansExcludedPaths -RootPath $StagingPath
+    Set-OceansCanonicalSkillPermissions -SkillPath $StagingPath
     $StagedContentSha256 = Get-OceansSkillContentSha256 -SkillPath $StagingPath
     if ($StagedContentSha256 -cne $ExpectedContentSha256) { throw "Candidate content changed during promotion: $Skill" }
     Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $TargetPath
