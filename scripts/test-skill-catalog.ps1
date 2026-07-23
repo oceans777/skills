@@ -86,6 +86,7 @@ try {
   Assert-FileContains (Join-Path $Install "archived-skill\SKILL.md") "version=archived"
   $Record = Get-OceansCatalogRecord -Path $RecordPath
   if ($Record.status -ne "blocked") { Fail "Security state did not remain blocked after unmanaged runtime conflict." }
+  Remove-Item (Join-Path $Install "archived-skill") -Recurse -Force
 
   $ReviewRoot = Join-Path $Catalog "review-queue\oceans-skills"
   $CandidatePath = Write-Skill $ReviewRoot "active-skill" "candidate"
