@@ -71,7 +71,7 @@ try {
     -Target community `
     -FirstPartySkillsRoot $FirstSkillsRoot `
     -CommunitySkillsRoot $CommunitySkillsRoot `
-    -CatalogRoot $Catalog | Out-String)
+    -CatalogRoot $Catalog *>&1 | Out-String)
   if ($Output -notmatch 'catalog-state: pending-review') {
     throw "Intake did not create pending review state."
   }
@@ -95,7 +95,7 @@ try {
     -InstallRoot $Install `
     -FirstPartySkillsRoot $FirstSkillsRoot `
     -CommunitySkillsRoot $CommunitySkillsRoot `
-    -CatalogRoot $Catalog | Out-String)
+    -CatalogRoot $Catalog *>&1 | Out-String)
   if (Test-Path -LiteralPath (Join-Path $Install "sample-import")) {
     throw "Pending imported skill must not install."
   }
