@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Tests = @(Get-Item -LiteralPath (Join-Path $ScriptDir 'test-add-skill-from-url.ps1'))
+$Tests = Get-ChildItem -LiteralPath $ScriptDir -Filter 'test-*.ps1' -File | Sort-Object Name
 
 foreach ($Test in $Tests) {
     Write-Host "[TEST] $($Test.Name)"
@@ -11,5 +11,5 @@ foreach ($Test in $Tests) {
     }
 }
 
-Write-Host 'Selected PowerShell tests passed.'
+Write-Host 'All PowerShell tests passed.'
 exit 0
