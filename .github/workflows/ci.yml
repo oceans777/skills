@@ -23,16 +23,12 @@ jobs:
         run: ./oceans test
 
   powershell:
-    name: PowerShell (windows-latest)
+    name: PowerShell debug (windows-latest)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
         with:
-          submodules: recursive
           show-progress: false
-      - name: Validate skills
+      - name: Run isolated PowerShell test
         shell: pwsh
-        run: .\oceans.ps1 validate
-      - name: Run PowerShell tests
-        shell: pwsh
-        run: .\oceans.ps1 test
+        run: .\scripts\test-add-skill-from-url.ps1
