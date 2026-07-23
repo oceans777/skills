@@ -25,6 +25,7 @@ if ($MaxFiles -le 0 -or $MaxBytes -le 0) { throw "Intake budgets must be positiv
 $TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "oceans-skill-intake-$([Guid]::NewGuid().ToString('N'))"
 $CloneRoot = Join-Path $TempRoot "repository"
 $LockHeld = $false
+$OriginalGitLfsSkipSmudge = $env:GIT_LFS_SKIP_SMUDGE
 New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
 
 function Invoke-GitChecked {
@@ -60,6 +61,7 @@ function Get-AvailableSourceRefs {
 try {
   $Uri = [Uri]$Url
   if ($Uri.Scheme -ne "https" -or $Uri.Host -ne "github.com") { throw "Only https://github.com skill URLs are supported." }
+  if ($Uri.AbsolutePath.Contains('%')) { throw "Percent-encoded GitHub paths are not accepted; provide the canonical visible URL." }
   $Segments = @($Uri.AbsolutePath.Trim('/') -split '/')
   if ($Segments.Count -lt 2) { throw "Invalid GitHub repository URL." }
   $Owner = $Segments[0]
@@ -108,9 +110,9 @@ try {
   if ($SkillPath) { $UrlSkillPath = $SkillPath.Replace('\', '/') }
   if ([System.IO.Path]::IsPathRooted($UrlSkillPath) -or $UrlSkillPath.Contains('\') -or (($UrlSkillPath -split '/') -contains '..')) { throw "Unsafe skill path: $UrlSkillPath" }
 
+  $env:GIT_LFS_SKIP_SMUDGE = "1"
   if ($LocalRepository) {
     if (-not (Test-Path -LiteralPath (Join-Path $LocalRepository '.git') -PathType Container)) { throw "-LocalRepository must point to a Git repository." }
-    $env:GIT_LFS_SKIP_SMUDGE = "1"
     Invoke-GitChecked -Arguments @("clone", "--quiet", "--filter=blob:none", "--no-checkout", $LocalRepository, $CloneRoot) | Out-Null
     if ($ResolvedSourceRef) {
       $ResolvedCommit = ((Invoke-GitChecked -Arguments @("-C", $LocalRepository, "rev-parse", "--verify", "$ResolvedSourceRef^{commit}")) -join '').Trim()
@@ -119,7 +121,6 @@ try {
       Invoke-GitChecked -Arguments @("-C", $CloneRoot, "checkout", "--quiet") | Out-Null
     }
   } else {
-    $env:GIT_LFS_SKIP_SMUDGE = "1"
     if ($ResolvedSourceRef) {
       Invoke-GitChecked -Arguments @("clone", "--quiet", "--filter=blob:none", "--no-checkout", $script:CloneUrl, $CloneRoot) | Out-Null
       Invoke-GitChecked -Arguments @("-C", $CloneRoot, "fetch", "--quiet", "--depth", "1", "origin", $ResolvedSourceRef) | Out-Null
@@ -288,5 +289,7 @@ try {
   Write-Host "next: review catalog/review-queue/$PackageRepository/$SkillName, then run .\oceans.ps1 catalog -Action activate -Skill $SkillName"
 } finally {
   if ($LockHeld) { Exit-OceansCatalogLock }
+  if ($null -eq $OriginalGitLfsSkipSmudge) { Remove-Item Env:\GIT_LFS_SKIP_SMUDGE -ErrorAction SilentlyContinue }
+  else { $env:GIT_LFS_SKIP_SMUDGE = $OriginalGitLfsSkipSmudge }
   if (Test-Path -LiteralPath $TempRoot) { Remove-Item -LiteralPath $TempRoot -Recurse -Force }
 }
