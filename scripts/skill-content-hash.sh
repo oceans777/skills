@@ -1,3 +1,7 @@
+if ! command -v oceans_find_included_skill_files >/dev/null 2>&1; then
+  . "$(CDPATH= cd "$(dirname "$0")" && pwd)/skill-publish-rules.sh"
+fi
+
 oceans_sha256_file() {
   file=$1
   if command -v sha256sum >/dev/null 2>&1; then
