@@ -6,7 +6,8 @@ param(
   [string] $FirstPartySkillsRoot,
   [string] $CommunitySkillsRoot,
   [string] $CatalogRoot,
-  [switch] $WithoutCatalog
+  [switch] $WithoutCatalog,
+  [switch] $ReconcileOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +31,7 @@ if ($CustomSourceRoots -and -not $CatalogExplicit -and -not $WithoutCatalog) {
   throw "Custom skill roots require -CatalogRoot. Use -WithoutCatalog only for an intentional legacy fixture."
 }
 if ($WithoutCatalog -and $CatalogExplicit) { throw "-WithoutCatalog cannot be combined with -CatalogRoot." }
+if ($ReconcileOnly -and $WithoutCatalog) { throw "-ReconcileOnly requires lifecycle catalog governance." }
 $CatalogEnabled = -not $WithoutCatalog
 
 $ValidationArguments = @{
@@ -55,7 +57,10 @@ if ($InstallRoot) {
 } else {
   $InstallTargets = @(Get-OceansRuntimeRoot -Runtime $Runtime -Operation "install" -Create)
 }
-if ($InstallTargets.Count -eq 0) { throw "No existing runtime skill roots found for install." }
+if ($InstallTargets.Count -eq 0) {
+  if ($ReconcileOnly) { Write-Host "runtime-reconcile: no-existing-roots"; exit 0 }
+  throw "No existing runtime skill roots found for install."
+}
 
 function Get-MarkerValue {
   param([string] $MarkerPath, [string] $Key)
@@ -139,19 +144,33 @@ function Reconcile-ManagedSkills {
   param([Parameter(Mandatory = $true)][string] $ResolvedInstallRoot)
   if (-not $CatalogEnabled) { return }
   $DisabledRoot = Get-ManagedDisabledRoot -ResolvedInstallRoot $ResolvedInstallRoot
+  $BlockedUnmanaged = New-Object System.Collections.Generic.List[string]
   foreach ($InstalledDirectory in @(Get-ChildItem -LiteralPath $ResolvedInstallRoot -Directory -Force)) {
-    if (($InstalledDirectory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+    try { $Status = Get-OceansCatalogStateForSkill -CatalogRoot $CatalogRoot -SkillName $InstalledDirectory.Name }
+    catch { Write-Warning $_; continue }
+    if (-not $Status) { continue }
+
+    $IsReparsePoint = (($InstalledDirectory.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
     $Marker = Join-Path $InstalledDirectory.FullName ".oceans-skill-source"
-    if (-not (Test-Path -LiteralPath $Marker -PathType Leaf)) { continue }
-    $SourceRepository = Get-MarkerValue -MarkerPath $Marker -Key "source_repository"
-    if (-not (Test-KnownOceansSource -Repository $SourceRepository)) { continue }
-    try { $Status = Get-CatalogStatus -SkillName $InstalledDirectory.Name } catch { Write-Warning $_; continue }
+    $SourceRepository = if (Test-Path -LiteralPath $Marker -PathType Leaf) { Get-MarkerValue -MarkerPath $Marker -Key "source_repository" } else { "" }
+    $IsManaged = (-not $IsReparsePoint) -and (Test-KnownOceansSource -Repository $SourceRepository)
+
+    if ($Status -eq "blocked" -and -not $IsManaged) {
+      $BlockedUnmanaged.Add($InstalledDirectory.FullName)
+      Write-Warning "Blocked skill has an unmanaged local copy that cannot be disabled automatically: $($InstalledDirectory.FullName)"
+      continue
+    }
+    if (-not $IsManaged) { continue }
+
     switch ($Status) {
       { $_ -in @("archived", "blocked", "pending-review") } {
         Disable-ManagedSkill -SourcePath $InstalledDirectory.FullName -DisabledRoot $DisabledRoot -State $Status -SkillName $InstalledDirectory.Name
       }
       "deprecated" { Write-Host "Retained deprecated managed skill without updating: $($InstalledDirectory.Name)" }
     }
+  }
+  if ($BlockedUnmanaged.Count -gt 0) {
+    throw "blocked-unmanaged-conflict: manually remove or rename the listed local copies before treating the block as enforced:`n$($BlockedUnmanaged -join [Environment]::NewLine)"
   }
 }
 
@@ -194,6 +213,11 @@ function Install-OceansSkillsToRoot {
 
   Reconcile-ManagedSkills -ResolvedInstallRoot $ResolvedInstallRoot
   Report-PendingCatalogRecords
+  if ($ReconcileOnly) {
+    Write-Host "Reconciled lifecycle state for install root: $ResolvedInstallRoot"
+    return
+  }
+
   foreach ($Source in $Sources) {
     if (-not (Test-Path -LiteralPath $Source.Path -PathType Container)) { Write-Host "Skipping missing source: $($Source.Path)"; continue }
     foreach ($SkillDirectory in @(Get-ChildItem -LiteralPath $Source.Path -Directory)) {

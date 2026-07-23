@@ -2,7 +2,10 @@
 
 OCEANS_CATALOG_SCHEMA_VERSION=2
 OCEANS_CATALOG_STATES="active pending-review deprecated archived blocked"
-OCEANS_CATALOG_KEYS="schema_version name status package_repository upstream_repository upstream_path upstream_ref upstream_commit candidate_upstream_repository candidate_upstream_path candidate_upstream_ref candidate_upstream_commit replacement status_reason transition_note updated_at"
+OCEANS_CATALOG_REQUIRED_KEYS="schema_version name status package_repository upstream_repository upstream_path upstream_ref upstream_commit candidate_upstream_repository candidate_upstream_path candidate_upstream_ref candidate_upstream_commit replacement status_reason transition_note updated_at"
+OCEANS_CATALOG_OPTIONAL_KEYS="content_sha256 candidate_content_sha256"
+OCEANS_CATALOG_KEYS="$OCEANS_CATALOG_REQUIRED_KEYS $OCEANS_CATALOG_OPTIONAL_KEYS"
+. "$(CDPATH= cd "$(dirname "$0")" && pwd)/skill-content-hash.sh"
 
 
 oceans_catalog_valid_skill_name() {
@@ -158,6 +161,8 @@ oceans_catalog_write_record() {
   replacement=${13}
   status_reason=${14}
   transition_note=${15}
+  content_sha256=${16:-}
+  candidate_content_sha256=${17:-}
 
   oceans_catalog_valid_skill_name "$skill_name" || {
     echo "Invalid catalog skill name: $skill_name" >&2
@@ -171,12 +176,20 @@ oceans_catalog_write_record() {
     oceans-skills|community-skills) ;;
     *) echo "Unsupported package repository: $package_repository" >&2; return 1 ;;
   esac
-  for value in "$skill_name" "$status" "$package_repository" "$upstream_repository" "$upstream_path" "$upstream_ref" "$upstream_commit" "$candidate_upstream_repository" "$candidate_upstream_path" "$candidate_upstream_ref" "$candidate_upstream_commit" "$replacement" "$status_reason" "$transition_note"; do
+  for value in "$skill_name" "$status" "$package_repository" "$upstream_repository" "$upstream_path" "$upstream_ref" "$upstream_commit" "$candidate_upstream_repository" "$candidate_upstream_path" "$candidate_upstream_ref" "$candidate_upstream_commit" "$replacement" "$status_reason" "$transition_note" "$content_sha256" "$candidate_content_sha256"; do
     oceans_catalog_safe_value "$value" || {
       echo "Catalog values must be single-line text." >&2
       return 1
     }
   done
+  if [ -n "$content_sha256" ] && ! oceans_valid_sha256 "$content_sha256"; then
+    echo "Invalid content SHA-256 for $skill_name" >&2
+    return 1
+  fi
+  if [ -n "$candidate_content_sha256" ] && ! oceans_valid_sha256 "$candidate_content_sha256"; then
+    echo "Invalid candidate content SHA-256 for $skill_name" >&2
+    return 1
+  fi
 
   skills_dir=$catalog_root/skills
   mkdir -p "$skills_dir"
@@ -196,6 +209,8 @@ oceans_catalog_write_record() {
     printf 'candidate_upstream_path=%s\n' "$candidate_upstream_path"
     printf 'candidate_upstream_ref=%s\n' "$candidate_upstream_ref"
     printf 'candidate_upstream_commit=%s\n' "$candidate_upstream_commit"
+    printf 'content_sha256=%s\n' "$content_sha256"
+    printf 'candidate_content_sha256=%s\n' "$candidate_content_sha256"
     printf 'replacement=%s\n' "$replacement"
     printf 'status_reason=%s\n' "$status_reason"
     printf 'transition_note=%s\n' "$transition_note"
@@ -224,7 +239,7 @@ oceans_catalog_record_schema_issues() {
       printf '%s\n' "$key" >> "$seen_file"
     fi
   done < "$record_path"
-  for required_key in $OCEANS_CATALOG_KEYS; do
+  for required_key in $OCEANS_CATALOG_REQUIRED_KEYS; do
     if ! grep -F -x -q "$required_key" "$seen_file"; then
       echo "Missing catalog key in ${record_path##*/}: $required_key"
     fi
@@ -266,6 +281,8 @@ oceans_catalog_validation_issues() {
     candidate_path=$(oceans_catalog_record_value "$record_path" candidate_upstream_path || true)
     candidate_ref=$(oceans_catalog_record_value "$record_path" candidate_upstream_ref || true)
     candidate_commit=$(oceans_catalog_record_value "$record_path" candidate_upstream_commit || true)
+    content_sha256=$(oceans_catalog_record_value "$record_path" content_sha256 || true)
+    candidate_content_sha256=$(oceans_catalog_record_value "$record_path" candidate_content_sha256 || true)
     replacement=$(oceans_catalog_record_value "$record_path" replacement || true)
     status_reason=$(oceans_catalog_record_value "$record_path" status_reason || true)
     updated_at=$(oceans_catalog_record_value "$record_path" updated_at || true)
@@ -293,17 +310,34 @@ oceans_catalog_validation_issues() {
 
     if [ "$current_count" -ne 0 ] && [ "$current_count" -ne 4 ]; then echo "Partial current provenance for $skill_name"; fi
     if [ "$candidate_count" -ne 0 ] && [ "$candidate_count" -ne 4 ]; then echo "Partial candidate provenance for $skill_name"; fi
+    if [ -n "$content_sha256" ] && ! oceans_valid_sha256 "$content_sha256"; then echo "Invalid content SHA-256 for $skill_name"; fi
+    if [ -n "$candidate_content_sha256" ] && ! oceans_valid_sha256 "$candidate_content_sha256"; then echo "Invalid candidate content SHA-256 for $skill_name"; fi
+    if [ "$current_count" -eq 0 ] && [ -n "$content_sha256" ]; then echo "Content SHA-256 exists without current provenance: $skill_name"; fi
+    if [ "$candidate_count" -eq 0 ] && [ -n "$candidate_content_sha256" ]; then echo "Candidate content SHA-256 exists without candidate provenance: $skill_name"; fi
+
     if [ "$current_count" -eq 4 ]; then
       oceans_catalog_valid_repository_url "$upstream_repository" || echo "Invalid upstream repository for $skill_name"
       oceans_catalog_valid_upstream_path "$upstream_path" || echo "Invalid upstream path for $skill_name: $upstream_path"
       case "$upstream_commit" in ''|*[!0-9a-f]*|???????????????????????????????????????|?????????????????????????????????????????*) echo "Invalid upstream commit for $skill_name" ;; esac
+      if [ -n "$content_sha256" ] && [ -n "$repository_root" ] && [ -d "$repository_root/$skill_name" ]; then
+        actual_content_sha256=$(oceans_skill_content_sha256 "$repository_root/$skill_name" 2>/dev/null || true)
+        [ -n "$actual_content_sha256" ] || echo "Unable to calculate published content SHA-256 for $skill_name"
+        [ -z "$actual_content_sha256" ] || [ "$actual_content_sha256" = "$content_sha256" ] || echo "Published content SHA-256 mismatch for $skill_name"
+      fi
     fi
     if [ "$candidate_count" -eq 4 ]; then
       oceans_catalog_valid_repository_url "$candidate_repository" || echo "Invalid candidate repository for $skill_name"
       oceans_catalog_valid_upstream_path "$candidate_path" || echo "Invalid candidate path for $skill_name: $candidate_path"
       case "$candidate_commit" in ''|*[!0-9a-f]*|???????????????????????????????????????|?????????????????????????????????????????*) echo "Invalid candidate commit for $skill_name" ;; esac
+      [ -n "$candidate_content_sha256" ] || echo "Candidate content SHA-256 is missing: $skill_name"
       review_path=$(oceans_catalog_review_path "$catalog_root" "$package_repository" "$skill_name")
-      [ -d "$review_path" ] || echo "Candidate review content is missing: $package_repository/$skill_name"
+      if [ ! -d "$review_path" ]; then
+        echo "Candidate review content is missing: $package_repository/$skill_name"
+      elif [ -n "$candidate_content_sha256" ] && oceans_valid_sha256 "$candidate_content_sha256"; then
+        actual_candidate_sha256=$(oceans_skill_content_sha256 "$review_path" 2>/dev/null || true)
+        [ -n "$actual_candidate_sha256" ] || echo "Unable to calculate candidate content SHA-256 for $skill_name"
+        [ -z "$actual_candidate_sha256" ] || [ "$actual_candidate_sha256" = "$candidate_content_sha256" ] || echo "Candidate content SHA-256 mismatch for $skill_name"
+      fi
     fi
 
     case "$status" in
@@ -372,8 +406,10 @@ oceans_catalog_validation_issues() {
       fi
       record_repository=$(oceans_catalog_record_value "$record_path" package_repository || true)
       candidate_commit=$(oceans_catalog_record_value "$record_path" candidate_upstream_commit || true)
+      candidate_content_sha256=$(oceans_catalog_record_value "$record_path" candidate_content_sha256 || true)
       [ "$record_repository" = "$package_repository" ] || echo "Candidate repository mismatch for $skill_name: $record_repository"
       [ -n "$candidate_commit" ] || echo "Orphan candidate review content: $package_repository/$skill_name"
+      [ -n "$candidate_content_sha256" ] || echo "Candidate content SHA-256 is missing: $package_repository/$skill_name"
     done
   done
 }

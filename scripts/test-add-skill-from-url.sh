@@ -10,6 +10,7 @@ FIRST_REPO=$TEST_ROOT/oceans
 COMMUNITY_REPO=$TEST_ROOT/community
 CATALOG=$TEST_ROOT/catalog
 INSTALL=$TEST_ROOT/runtime/skills
+export OCEANS_TEST_MODE=1
 cleanup() { rm -rf "$TEST_ROOT"; }
 trap cleanup EXIT HUP INT TERM
 
@@ -97,8 +98,9 @@ sh "$REPO_ROOT/scripts/catalog-skill.sh" reject --catalog-root "$CATALOG" --skil
 assert_file_contains "$COMMUNITY_REPO/skills/sample-import/SKILL.md" version=one
 [ ! -e "$REVIEW" ] || fail "Rejected update candidate remains."
 
-# Provenance changes, path escape, direct activation, and resource overflow fail closed.
+# Provenance changes, encoded paths, path escape, direct activation, and resource overflow fail closed.
 if sh "$REPO_ROOT/scripts/add-skill-from-url.sh" --url https://github.com/other/upstream/tree/main/skills/sample-import --local-repository "$OTHER_UPSTREAM" --target community --catalog-root "$CATALOG" --replace-existing >/dev/null 2>&1; then fail "Source repository change was accepted without explicit approval."; fi
+if sh "$REPO_ROOT/scripts/add-skill-from-url.sh" --url https://github.com/example/upstream/tree/main/skills%2Fsample-import --local-repository "$UPSTREAM" --target community --catalog-root "$CATALOG" >/dev/null 2>&1; then fail "Percent-encoded path was accepted."; fi
 if sh "$REPO_ROOT/scripts/add-skill-from-url.sh" --url https://github.com/example/upstream --local-repository "$UPSTREAM" --skill-path ../escape --target community --catalog-root "$CATALOG" >/dev/null 2>&1; then fail "Path traversal was accepted."; fi
 if sh "$REPO_ROOT/scripts/add-skill-from-url.sh" --url https://github.com/example/upstream --local-repository "$UPSTREAM" --target community --catalog-root "$CATALOG" --activate >/dev/null 2>&1; then fail "Direct activation during intake was accepted."; fi
 if OCEANS_INTAKE_MAX_FILES=1 sh "$REPO_ROOT/scripts/add-skill-from-url.sh" --url https://github.com/example/upstream/tree/feature/skill/skills/sample-import --local-repository "$UPSTREAM" --target community --catalog-root "$CATALOG" --replace-existing >/dev/null 2>&1; then fail "File budget overflow was accepted."; fi

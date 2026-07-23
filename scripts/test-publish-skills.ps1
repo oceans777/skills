@@ -50,14 +50,23 @@ function Add-ActiveChange([string] $Name, [string] $Version) {
 }
 
 function Run-Publish([bool] $ExpectSuccess, [switch] $DryRun) {
-  $Home = Join-Path $Root "home"; New-Item -ItemType Directory -Force -Path $Home | Out-Null
+  $FixtureHome = Join-Path $Root "home"; New-Item -ItemType Directory -Force -Path $FixtureHome | Out-Null
   $OldHome = $env:HOME; $OldUserProfile = $env:USERPROFILE; $OldGitConfig = $env:GIT_CONFIG_GLOBAL
+  $PreviousPreference = $ErrorActionPreference
   try {
-    $env:HOME = $Home; $env:USERPROFILE = $Home; $env:GIT_CONFIG_GLOBAL = Join-Path $Home ".gitconfig"
-    $Args = @{ RepoRoot = $Entry; FirstPartyRepoPath = $First; CommunityRepoPath = $Community }
-    if ($DryRun) { $Args.DryRun = $true }
-    try { $script:Output = (& $PublishScript @Args *>&1 | Out-String); $Succeeded = $true } catch { $script:Output = ($_ | Out-String); $Succeeded = $false }
+    $env:HOME = $FixtureHome; $env:USERPROFILE = $FixtureHome; $env:GIT_CONFIG_GLOBAL = Join-Path $FixtureHome ".gitconfig"
+    $ErrorActionPreference = "Continue"
+    $CommandArguments = @(
+      "-NoProfile", "-File", $PublishScript,
+      "-RepoRoot", $Entry,
+      "-FirstPartyRepoPath", $First,
+      "-CommunityRepoPath", $Community
+    )
+    if ($DryRun) { $CommandArguments += "-DryRun" }
+    $script:Output = (& pwsh @CommandArguments *>&1 | Out-String)
+    $Succeeded = $LASTEXITCODE -eq 0
   } finally {
+    $ErrorActionPreference = $PreviousPreference
     if ($null -eq $OldHome) { Remove-Item Env:\HOME -ErrorAction SilentlyContinue } else { $env:HOME = $OldHome }
     if ($null -eq $OldUserProfile) { Remove-Item Env:\USERPROFILE -ErrorAction SilentlyContinue } else { $env:USERPROFILE = $OldUserProfile }
     if ($null -eq $OldGitConfig) { Remove-Item Env:\GIT_CONFIG_GLOBAL -ErrorAction SilentlyContinue } else { $env:GIT_CONFIG_GLOBAL = $OldGitConfig }

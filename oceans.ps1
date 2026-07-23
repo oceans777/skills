@@ -4,6 +4,7 @@ param(
   [string] $Command = "help",
 
   [string] $SourceRoot,
+  [string] $InstallRoot,
   [ValidateSet("codex", "agents", "claude", "openclaw", "hermes", "custom")] [string] $Runtime,
   [ValidateSet("text", "json")] [string] $Format,
   [string] $Skill,
@@ -25,7 +26,6 @@ param(
   [ValidateSet("list", "activate", "reject", "cancel-review", "restore", "unblock", "deprecate", "archive", "block")] [string] $Action = "list",
   [string] $Reason,
   [string] $Replacement,
-  [string] $LocalRepository,
   [string] $CatalogRoot,
   [string] $FirstPartySkillsRoot,
   [string] $CommunitySkillsRoot
@@ -38,6 +38,7 @@ switch ($Command) {
   "sync" { & "$RepoRoot\scripts\sync.ps1" }
   "install" {
     $Args = @{}
+    if ($InstallRoot) { $Args.InstallRoot = $InstallRoot }
     if ($Runtime) { $Args.Runtime = $Runtime }
     if ($AllExistingRuntimes) { $Args.AllExistingRuntimes = $true }
     if ($CatalogRoot) { $Args.CatalogRoot = $CatalogRoot }
@@ -99,7 +100,6 @@ switch ($Command) {
     if ($ReplaceExisting) { $Args.ReplaceExisting = $true }
     if ($AllowSourceChange) { $Args.AllowSourceChange = $true }
     if ($DryRun) { $Args.DryRun = $true }
-    if ($LocalRepository) { $Args.LocalRepository = $LocalRepository }
     if ($CatalogRoot) { $Args.CatalogRoot = $CatalogRoot }
     & "$RepoRoot\scripts\add-skill-from-url.ps1" @Args
   }
@@ -111,13 +111,14 @@ switch ($Command) {
     if ($CatalogRoot) { $Args.CatalogRoot = $CatalogRoot }
     if ($FirstPartySkillsRoot) { $Args.FirstPartySkillsRoot = $FirstPartySkillsRoot }
     if ($CommunitySkillsRoot) { $Args.CommunitySkillsRoot = $CommunitySkillsRoot }
+    if ($InstallRoot) { $Args.InstallRoot = $InstallRoot }
     & "$RepoRoot\scripts\catalog-skill.ps1" @Args
   }
   "help" {
     Write-Host "oceans777 skills commands:"
     Write-Host ""
     Write-Host "Daily user commands:"
-    Write-Host "  .\oceans.ps1 sync      Pull updates and check out pinned child repositories"
+    Write-Host "  .\oceans.ps1 sync      Pull updates, update child repositories, and enforce lifecycle blocks"
     Write-Host "  .\oceans.ps1 install   Reconcile lifecycle state and install active skills"
     Write-Host "  .\oceans.ps1 validate  Validate repositories, catalog, and review candidates"
     Write-Host "  .\oceans.ps1 test      Run the platform test suite"

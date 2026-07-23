@@ -6,12 +6,15 @@ REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 . "$SCRIPT_DIR/skill-publish-rules.sh"
 . "$SCRIPT_DIR/skill-catalog.sh"
 . "$SCRIPT_DIR/directory-transaction.sh"
+SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 
 ACTION=${1:-list}
 if [ "$#" -gt 0 ]; then shift; fi
 CATALOG_ROOT=$REPO_ROOT/catalog
 FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
+INSTALL_ROOT=
+SKIP_RUNTIME_RECONCILE=0
 SKILL=
 REASON=
 REPLACEMENT=
@@ -32,6 +35,8 @@ while [ "$#" -gt 0 ]; do
     --catalog-root) [ "$#" -ge 2 ] || { echo "--catalog-root needs a path." >&2; exit 2; }; CATALOG_ROOT=$2; shift 2 ;;
     --first-party-root|--first-party-skills-root) [ "$#" -ge 2 ] || { echo "$1 needs a path." >&2; exit 2; }; FIRST_PARTY_ROOT=$2; shift 2 ;;
     --community-root|--community-skills-root) [ "$#" -ge 2 ] || { echo "$1 needs a path." >&2; exit 2; }; COMMUNITY_ROOT=$2; shift 2 ;;
+    --install-root) [ "$#" -ge 2 ] || { echo "--install-root needs a path." >&2; exit 2; }; INSTALL_ROOT=$2; shift 2 ;;
+    --skip-runtime-reconcile) SKIP_RUNTIME_RECONCILE=1; shift ;;
     --skill) [ "$#" -ge 2 ] || { echo "--skill needs a value." >&2; exit 2; }; SKILL=$2; shift 2 ;;
     --reason) [ "$#" -ge 2 ] || { echo "--reason needs a value." >&2; exit 2; }; REASON=$2; shift 2 ;;
     --replacement) [ "$#" -ge 2 ] || { echo "--replacement needs a value." >&2; exit 2; }; REPLACEMENT=$2; shift 2 ;;
@@ -73,6 +78,8 @@ load_record() {
   CANDIDATE_PATH=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_path || true)
   CANDIDATE_REF=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_ref || true)
   CANDIDATE_COMMIT=$(oceans_catalog_record_value "$RECORD_PATH" candidate_upstream_commit || true)
+  CONTENT_SHA256=$(oceans_catalog_record_value "$RECORD_PATH" content_sha256 || true)
+  CANDIDATE_CONTENT_SHA256=$(oceans_catalog_record_value "$RECORD_PATH" candidate_content_sha256 || true)
   CURRENT_REPLACEMENT=$(oceans_catalog_record_value "$RECORD_PATH" replacement || true)
   CURRENT_STATUS_REASON=$(oceans_catalog_record_value "$RECORD_PATH" status_reason || true)
 }
@@ -80,6 +87,32 @@ load_record() {
 acquire_skill_lock() {
   oceans_catalog_acquire_lock "$CATALOG_ROOT" "$SKILL"
   LOCK_HELD=1
+}
+
+reconcile_runtime() {
+  target_status=$1
+  if [ "$SKIP_RUNTIME_RECONCILE" -eq 1 ]; then
+    echo "runtime-reconcile: explicitly-skipped"
+    return
+  fi
+
+  set -- --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" --catalog-root "$CATALOG_ROOT"
+  if [ -n "$INSTALL_ROOT" ]; then
+    set -- "$@" --install-root "$INSTALL_ROOT"
+  else
+    existing_roots=$(list_existing_root_records)
+    if [ -z "$existing_roots" ]; then
+      echo "runtime-reconcile: no-existing-roots"
+      return
+    fi
+    set -- "$@" --all-existing-runtimes
+  fi
+  [ "$target_status" = active ] || set -- "$@" --reconcile-only
+
+  if ! sh "$SCRIPT_DIR/install-skills.sh" "$@"; then
+    echo "Lifecycle state was committed, but runtime reconciliation failed." >&2
+    exit 1
+  fi
 }
 
 validate_candidate() {
@@ -99,6 +132,13 @@ validate_candidate() {
       [ -s "$candidate_root/$required" ] || { echo "Candidate is missing $required: $SKILL" >&2; return 1; }
     done
   fi
+  oceans_valid_sha256 "$CANDIDATE_CONTENT_SHA256" || { echo "Candidate content SHA-256 is missing or invalid: $SKILL" >&2; return 1; }
+  actual_candidate_sha256=$(oceans_skill_content_sha256 "$candidate_root") || return 1
+  [ "$actual_candidate_sha256" = "$CANDIDATE_CONTENT_SHA256" ] || {
+    echo "Candidate content changed after intake: $SKILL. Expected $CANDIDATE_CONTENT_SHA256, got $actual_candidate_sha256" >&2
+    return 1
+  }
+  printf '%s\n' "$actual_candidate_sha256"
 }
 
 restore_target_from_backup() {
@@ -126,7 +166,7 @@ promote_candidate() {
   case "$STATUS" in pending-review|active) ;; *) echo "catalog-transition-not-allowed: $STATUS -> active" >&2; exit 1 ;; esac
   [ -n "$CANDIDATE_COMMIT" ] || { echo "catalog-candidate-not-found: $SKILL" >&2; exit 1; }
   REVIEW_PATH=$(oceans_catalog_review_path "$CATALOG_ROOT" "$PACKAGE_REPOSITORY" "$SKILL")
-  validate_candidate "$REVIEW_PATH"
+  expected_content_sha256=$(validate_candidate "$REVIEW_PATH") || exit 1
 
   case "$PACKAGE_REPOSITORY" in
     oceans-skills) target_root=$FIRST_PARTY_ROOT ;;
@@ -151,11 +191,16 @@ promote_candidate() {
     mv "$review_hold" "$REVIEW_PATH"
     exit 1
   }
-  if cp -R "$review_hold"/. "$staging_path" && oceans_remove_excluded_paths "$staging_path" && oceans_commit_staged_directory "$staging_path" "$target_path"; then
-    if oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" active "$PACKAGE_REPOSITORY" \
-      "$CANDIDATE_REPOSITORY" "$CANDIDATE_PATH" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
-      "" "" "" "" "" "" "activated reviewed candidate $CANDIDATE_COMMIT"; then
-      promotion_ok=1
+  if cp -R "$review_hold"/. "$staging_path" && oceans_remove_excluded_paths "$staging_path"; then
+    staged_content_sha256=$(oceans_skill_content_sha256 "$staging_path" || true)
+    if [ "$staged_content_sha256" = "$expected_content_sha256" ] && oceans_commit_staged_directory "$staging_path" "$target_path"; then
+      published_content_sha256=$(oceans_skill_content_sha256 "$target_path" || true)
+      if [ "$published_content_sha256" = "$expected_content_sha256" ] && oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" active "$PACKAGE_REPOSITORY" \
+        "$CANDIDATE_REPOSITORY" "$CANDIDATE_PATH" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+        "" "" "" "" "" "" "activated reviewed candidate $CANDIDATE_COMMIT with content $published_content_sha256" \
+        "$published_content_sha256" ""; then
+        promotion_ok=1
+      fi
     fi
   fi
 
@@ -164,6 +209,7 @@ promote_candidate() {
     echo "catalog-state: active"
     echo "skill: $SKILL"
     echo "activated-commit: $CANDIDATE_COMMIT"
+    echo "activated-content-sha256: $expected_content_sha256"
     return
   fi
 
@@ -190,7 +236,8 @@ reject_candidate() {
     fi
   elif oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" "$STATUS" "$PACKAGE_REPOSITORY" \
     "$UPSTREAM_REPOSITORY" "$UPSTREAM_PATH" "$UPSTREAM_REF" "$UPSTREAM_COMMIT" \
-    "" "" "" "" "$CURRENT_REPLACEMENT" "$CURRENT_STATUS_REASON" "rejected candidate $CANDIDATE_COMMIT"; then
+    "" "" "" "" "$CURRENT_REPLACEMENT" "$CURRENT_STATUS_REASON" "rejected candidate $CANDIDATE_COMMIT" \
+    "$CONTENT_SHA256" ""; then
     remove_hold_best_effort "$review_hold"
     echo "catalog-candidate-rejected: $SKILL"
     echo "catalog-state: $STATUS"
@@ -230,7 +277,8 @@ transition_status() {
 
   oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" "$target_status" "$PACKAGE_REPOSITORY" \
     "$UPSTREAM_REPOSITORY" "$UPSTREAM_PATH" "$UPSTREAM_REF" "$UPSTREAM_COMMIT" \
-    "" "" "" "" "$replacement" "$status_reason" "$transition_note"
+    "" "" "" "" "$replacement" "$status_reason" "$transition_note" "$CONTENT_SHA256" ""
+  reconcile_runtime "$target_status"
   echo "catalog-state: $target_status"
   echo "skill: $SKILL"
 }

@@ -1,12 +1,15 @@
 $script:OceansCatalogSchemaVersion = "2"
 $script:OceansCatalogStates = @("active", "pending-review", "deprecated", "archived", "blocked")
-$script:OceansCatalogKeys = @(
+$script:OceansCatalogRequiredKeys = @(
   "schema_version", "name", "status", "package_repository",
   "upstream_repository", "upstream_path", "upstream_ref", "upstream_commit",
   "candidate_upstream_repository", "candidate_upstream_path", "candidate_upstream_ref", "candidate_upstream_commit",
   "replacement", "status_reason", "transition_note", "updated_at"
 )
+$script:OceansCatalogOptionalKeys = @("content_sha256", "candidate_content_sha256")
+$script:OceansCatalogKeys = @($script:OceansCatalogRequiredKeys + $script:OceansCatalogOptionalKeys)
 $script:OceansCatalogLockPath = $null
+. (Join-Path $PSScriptRoot "skill-content-hash.ps1")
 
 function Test-OceansCatalogSkillName {
   param([Parameter(Mandatory = $true)][string] $Name)
@@ -138,7 +141,9 @@ function Write-OceansCatalogRecord {
     [AllowEmptyString()][string] $CandidateUpstreamCommit = "",
     [AllowEmptyString()][string] $Replacement = "",
     [AllowEmptyString()][string] $StatusReason = "",
-    [AllowEmptyString()][string] $TransitionNote = ""
+    [AllowEmptyString()][string] $TransitionNote = "",
+    [AllowEmptyString()][string] $ContentSha256 = "",
+    [AllowEmptyString()][string] $CandidateContentSha256 = ""
   )
 
   if (-not (Test-OceansCatalogSkillName -Name $SkillName)) { throw "Invalid catalog skill name: $SkillName" }
@@ -149,10 +154,12 @@ function Write-OceansCatalogRecord {
   foreach ($Value in @(
       $SkillName, $Status, $PackageRepository, $UpstreamRepository, $UpstreamPath, $UpstreamRef, $UpstreamCommit,
       $CandidateUpstreamRepository, $CandidateUpstreamPath, $CandidateUpstreamRef, $CandidateUpstreamCommit,
-      $Replacement, $StatusReason, $TransitionNote
+      $Replacement, $StatusReason, $TransitionNote, $ContentSha256, $CandidateContentSha256
     )) {
     Assert-OceansCatalogSingleLineValue -Value $Value
   }
+  if ($ContentSha256 -and -not (Test-OceansSha256 -Value $ContentSha256)) { throw "Invalid content SHA-256 for $SkillName" }
+  if ($CandidateContentSha256 -and -not (Test-OceansSha256 -Value $CandidateContentSha256)) { throw "Invalid candidate content SHA-256 for $SkillName" }
 
   $SkillsDirectory = Join-Path $CatalogRoot "skills"
   New-Item -ItemType Directory -Force -Path $SkillsDirectory | Out-Null
@@ -171,6 +178,8 @@ function Write-OceansCatalogRecord {
     "candidate_upstream_path=$CandidateUpstreamPath",
     "candidate_upstream_ref=$CandidateUpstreamRef",
     "candidate_upstream_commit=$CandidateUpstreamCommit",
+    "content_sha256=$ContentSha256",
+    "candidate_content_sha256=$CandidateContentSha256",
     "replacement=$Replacement",
     "status_reason=$StatusReason",
     "transition_note=$TransitionNote",
@@ -201,7 +210,7 @@ function Get-OceansCatalogRecordSchemaIssues {
       $Seen[$Key] = $true
     }
   }
-  foreach ($RequiredKey in $script:OceansCatalogKeys) {
+  foreach ($RequiredKey in $script:OceansCatalogRequiredKeys) {
     if (-not $Seen.ContainsKey($RequiredKey)) {
       $Issues.Add("Missing catalog key in $([System.IO.Path]::GetFileName($RecordPath)): $RequiredKey")
     }
@@ -242,6 +251,8 @@ function Get-OceansCatalogValidationIssues {
       $Record = Get-OceansCatalogRecord -Path $RecordFile.FullName
       $Status = [string]$Record["status"]
       $PackageRepository = [string]$Record["package_repository"]
+      $ContentSha256 = [string]$Record["content_sha256"]
+      $CandidateContentSha256 = [string]$Record["candidate_content_sha256"]
       if ([string]$Record["schema_version"] -ne $script:OceansCatalogSchemaVersion) { $Issues.Add("Unsupported catalog schema for ${SkillName}: $([string]$Record['schema_version'])") }
       if (-not (Test-OceansCatalogSkillName -Name $SkillName)) { $Issues.Add("Invalid catalog filename: $($RecordFile.Name)") }
       if ([string]$Record["name"] -cne $SkillName) { $Issues.Add("Catalog name mismatch: $SkillName") }
@@ -265,17 +276,37 @@ function Get-OceansCatalogValidationIssues {
       if ($CurrentCount -notin @(0, 4)) { $Issues.Add("Partial current provenance for $SkillName") }
       if ($CandidateCount -notin @(0, 4)) { $Issues.Add("Partial candidate provenance for $SkillName") }
 
+      if ($ContentSha256 -and -not (Test-OceansSha256 -Value $ContentSha256)) { $Issues.Add("Invalid content SHA-256 for $SkillName") }
+      if ($CandidateContentSha256 -and -not (Test-OceansSha256 -Value $CandidateContentSha256)) { $Issues.Add("Invalid candidate content SHA-256 for $SkillName") }
+      if ($CurrentCount -eq 0 -and $ContentSha256) { $Issues.Add("Content SHA-256 exists without current provenance: $SkillName") }
+      if ($CandidateCount -eq 0 -and $CandidateContentSha256) { $Issues.Add("Candidate content SHA-256 exists without candidate provenance: $SkillName") }
+
       if ($CurrentCount -eq 4) {
         if (-not (Test-OceansCatalogRepositoryUrl -Value $CurrentValues[0])) { $Issues.Add("Invalid upstream repository for $SkillName") }
         if (-not (Test-OceansCatalogUpstreamPath -Value $CurrentValues[1])) { $Issues.Add("Invalid upstream path for ${SkillName}: $($CurrentValues[1])") }
         if ($CurrentValues[3] -notmatch '^[0-9a-f]{40}$') { $Issues.Add("Invalid upstream commit for $SkillName") }
+        $CurrentPackagePath = if ($RepositoryRoot) { Join-Path $RepositoryRoot $SkillName } else { $null }
+        if ($ContentSha256 -and $CurrentPackagePath -and (Test-Path -LiteralPath $CurrentPackagePath -PathType Container)) {
+          try {
+            $ActualContentSha256 = Get-OceansSkillContentSha256 -SkillPath $CurrentPackagePath
+            if ($ActualContentSha256 -cne $ContentSha256) { $Issues.Add("Published content SHA-256 mismatch for $SkillName") }
+          } catch { $Issues.Add("Unable to calculate published content SHA-256 for ${SkillName}: $($_.Exception.Message)") }
+        }
       }
       if ($CandidateCount -eq 4) {
         if (-not (Test-OceansCatalogRepositoryUrl -Value $CandidateValues[0])) { $Issues.Add("Invalid candidate repository for $SkillName") }
         if (-not (Test-OceansCatalogUpstreamPath -Value $CandidateValues[1])) { $Issues.Add("Invalid candidate path for ${SkillName}: $($CandidateValues[1])") }
         if ($CandidateValues[3] -notmatch '^[0-9a-f]{40}$') { $Issues.Add("Invalid candidate commit for $SkillName") }
+        if (-not $CandidateContentSha256) { $Issues.Add("Candidate content SHA-256 is missing: $SkillName") }
         $ReviewPath = Get-OceansCatalogReviewPath -CatalogRoot $CatalogRoot -PackageRepository $PackageRepository -SkillName $SkillName
-        if (-not (Test-Path -LiteralPath $ReviewPath -PathType Container)) { $Issues.Add("Candidate review content is missing: $PackageRepository/$SkillName") }
+        if (-not (Test-Path -LiteralPath $ReviewPath -PathType Container)) {
+          $Issues.Add("Candidate review content is missing: $PackageRepository/$SkillName")
+        } elseif ($CandidateContentSha256 -and (Test-OceansSha256 -Value $CandidateContentSha256)) {
+          try {
+            $ActualCandidateSha256 = Get-OceansSkillContentSha256 -SkillPath $ReviewPath
+            if ($ActualCandidateSha256 -cne $CandidateContentSha256) { $Issues.Add("Candidate content SHA-256 mismatch for $SkillName") }
+          } catch { $Issues.Add("Unable to calculate candidate content SHA-256 for ${SkillName}: $($_.Exception.Message)") }
+        }
       }
 
       $StatusReason = [string]$Record["status_reason"]
@@ -345,6 +376,7 @@ function Get-OceansCatalogValidationIssues {
       $Record = Get-OceansCatalogRecord -Path $RecordPath
       if ([string]$Record["package_repository"] -cne $PackageRepository) { $Issues.Add("Candidate repository mismatch for ${SkillName}: $([string]$Record['package_repository'])") }
       if ([string]::IsNullOrWhiteSpace([string]$Record["candidate_upstream_commit"])) { $Issues.Add("Orphan candidate review content: $PackageRepository/$SkillName") }
+      if ([string]::IsNullOrWhiteSpace([string]$Record["candidate_content_sha256"])) { $Issues.Add("Candidate content SHA-256 is missing: $PackageRepository/$SkillName") }
     }
   }
 

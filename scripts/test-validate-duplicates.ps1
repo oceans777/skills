@@ -17,7 +17,7 @@ function Invoke-Validate {
   $Previous = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
-    $Output = & powershell -NoProfile -ExecutionPolicy Bypass -File "$RepoRoot\scripts\validate-skills.ps1" -FirstPartySkillsRoot $FirstPartyRoot -CommunitySkillsRoot $CommunityRoot -WithoutCatalog *>&1 | Out-String
+    $Output = & pwsh -NoProfile -File "$RepoRoot\scripts\validate-skills.ps1" -FirstPartySkillsRoot $FirstPartyRoot -CommunitySkillsRoot $CommunityRoot -WithoutCatalog *>&1 | Out-String
     $Code = $LASTEXITCODE
   } finally { $ErrorActionPreference = $Previous }
   return [PSCustomObject]@{ ExitCode = $Code; Output = $Output }
