@@ -155,6 +155,18 @@ function Reconcile-ManagedSkills {
   }
 }
 
+function Report-PendingCatalogRecords {
+  if (-not $CatalogEnabled) { return }
+  $SkillsDirectory = Join-Path $CatalogRoot "skills"
+  if (-not (Test-Path -LiteralPath $SkillsDirectory -PathType Container)) { return }
+  foreach ($RecordFile in @(Get-ChildItem -LiteralPath $SkillsDirectory -Filter '*.skill' -File | Sort-Object Name)) {
+    $Record = Get-OceansCatalogRecord -Path $RecordFile.FullName
+    if ([string]$Record["status"] -eq "pending-review") {
+      Write-Host "Skipped pending-review skill: $([string]$Record['name'])"
+    }
+  }
+}
+
 function Test-CatalogAllowsInstall {
   param([string] $RepositoryName, [string] $SkillName)
   if (-not $CatalogEnabled) { return $true }
@@ -181,6 +193,7 @@ function Install-OceansSkillsToRoot {
   $DisabledRoot = Get-ManagedDisabledRoot -ResolvedInstallRoot $ResolvedInstallRoot
 
   Reconcile-ManagedSkills -ResolvedInstallRoot $ResolvedInstallRoot
+  Report-PendingCatalogRecords
   foreach ($Source in $Sources) {
     if (-not (Test-Path -LiteralPath $Source.Path -PathType Container)) { Write-Host "Skipping missing source: $($Source.Path)"; continue }
     foreach ($SkillDirectory in @(Get-ChildItem -LiteralPath $Source.Path -Directory)) {
