@@ -33,16 +33,16 @@ try {
   Write-OceansCatalogRecord -CatalogRoot $Catalog -State pending-review -SkillName pending-skill -Repository community-skills -SourceUrl https://github.com/example/community -SourcePath skills/pending-skill -SourceRef main -SourceCommit $Commit | Out-Null
 
   & (Join-Path $RepoRoot "scripts\validate-skills.ps1") -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog | Out-Null
-  $Output = (& (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog | Out-String)
+  $Output = (& (Join-Path $RepoRoot "scripts\install-skills.ps1") -InstallRoot $Install -FirstPartySkillsRoot $First -CommunitySkillsRoot $Community -CatalogRoot $Catalog *>&1 | Out-String)
   if (-not (Test-Path -LiteralPath (Join-Path $Install "active-skill\SKILL.md") -PathType Leaf)) { throw "Active skill was not installed." }
   if (Test-Path -LiteralPath (Join-Path $Install "archived-skill")) { throw "Archived skill must not be installed." }
   if (Test-Path -LiteralPath (Join-Path $Install "pending-skill")) { throw "Pending skill must not be installed." }
   if ($Output -notmatch 'Skipped archived skill: archived-skill') { throw "Archive skip was not reported." }
   if ($Output -notmatch 'Skipped pending-review skill: pending-skill') { throw "Pending skip was not reported." }
 
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") restore -CatalogRoot $Catalog -Skill archived-skill | Out-Null
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") -Action restore -CatalogRoot $Catalog -Skill archived-skill | Out-Null
   if (-not (Test-Path -LiteralPath (Join-Path $Catalog "active\archived-skill.skill") -PathType Leaf)) { throw "Restore failed." }
-  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") archive -CatalogRoot $Catalog -Skill archived-skill -Reason "retired again" | Out-Null
+  & (Join-Path $RepoRoot "scripts\catalog-skill.ps1") -Action archive -CatalogRoot $Catalog -Skill archived-skill -Reason "retired again" | Out-Null
   if (-not (Test-Path -LiteralPath (Join-Path $Catalog "archived\archived-skill.skill") -PathType Leaf)) { throw "Archive failed." }
 
   Write-Host "PowerShell skill catalog test passed."
