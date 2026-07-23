@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -11,21 +14,24 @@ concurrency:
 jobs:
   shell-validation:
     name: Shell validation (${{ matrix.os }})
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: recursive
           show-progress: false
+          persist-credentials: false
       - name: Validate skills
         run: ./oceans validate
 
   shell-tests:
     name: Shell test (${{ matrix.os }}, ${{ matrix.test }})
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -34,14 +40,16 @@ jobs:
           - test-add-skill-from-url.sh
           - test-install-local-first.sh
           - test-publish-skills.sh
+          - test-runtime-reconciliation.sh
           - test-skill-catalog.sh
           - test-validate-duplicates.sh
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: recursive
           show-progress: false
+          persist-credentials: false
       - name: Run Shell test
         shell: sh
         run: |
@@ -52,7 +60,7 @@ jobs:
           exit "$code"
       - name: Upload Shell test output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: shell-${{ matrix.os }}-${{ matrix.test }}
           path: test-output.txt
@@ -60,12 +68,14 @@ jobs:
 
   powershell-validation:
     name: PowerShell validation (windows-latest)
+    timeout-minutes: 10
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: recursive
           show-progress: false
+          persist-credentials: false
       - name: Parse PowerShell files
         shell: pwsh
         run: |
@@ -86,6 +96,7 @@ jobs:
 
   powershell-tests:
     name: PowerShell test (${{ matrix.test }})
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -93,14 +104,16 @@ jobs:
           - test-add-skill-from-url.ps1
           - test-install-local-first.ps1
           - test-publish-skills.ps1
+          - test-runtime-reconciliation.ps1
           - test-skill-catalog.ps1
           - test-validate-duplicates.ps1
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           submodules: recursive
           show-progress: false
+          persist-credentials: false
       - name: Run PowerShell test
         shell: pwsh
         run: |
@@ -116,7 +129,7 @@ jobs:
           exit $code
       - name: Upload PowerShell test output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: powershell-${{ matrix.test }}
           path: test-output.txt
