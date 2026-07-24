@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
+. (Join-Path $RepoRoot "scripts\skill-content-hash.ps1")
 $CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
 $TestRoot = Join-Path $CanonicalTemp ("oceans-published-idea-ledger-" + [Guid]::NewGuid().ToString("N"))
 
@@ -25,6 +26,11 @@ function Remove-TestRoot {
 }
 
 try {
+  $PublishedSkill = Join-Path $RepoRoot "repos\oceans-skills\skills\idea-ledger"
+  $ContentSha256 = Get-OceansSkillContentSha256 -SkillPath $PublishedSkill
+  Write-Host "idea-ledger-content-sha256=$ContentSha256"
+  Assert-FileContains (Join-Path $RepoRoot "catalog\skills\idea-ledger.skill") "content_sha256=$ContentSha256"
+
   New-Item -ItemType Directory -Force -Path $TestRoot | Out-Null
   $env:CODEX_HOME = Join-Path $TestRoot "codex"
   $env:AGENTS_HOME = Join-Path $TestRoot "agents"
@@ -46,7 +52,10 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeHome "skills") | Out-Null
   }
 
-  & (Join-Path $RepoRoot "scripts\install-skills.ps1") -AllExistingRuntimes | Out-Null
+  $InstallText = (& (Join-Path $RepoRoot "scripts\install-skills.ps1") -AllExistingRuntimes *>&1 | Out-String)
+  if ($InstallText.Contains("legacy package without catalog content SHA-256: idea-ledger")) {
+    throw "idea-ledger was installed without a catalog content fingerprint"
+  }
 
   $Targets = @(
     [PSCustomObject]@{ Runtime = "codex"; Root = Join-Path $env:CODEX_HOME "skills" },
@@ -83,6 +92,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "idea-ledger status failed" }
   Assert-PathExists (Join-Path $ProjectRoot ".idea-ledger\config.json")
 
+  Write-Host $InstallText
   Write-Host "Published idea-ledger install and runtime verification passed."
 } finally {
   Remove-TestRoot
