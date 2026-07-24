@@ -47,7 +47,7 @@ try {
   $Output = & "$RepoRoot\scripts\install-skills.ps1" -InstallRoot $InstallRoot -FirstPartySkillsRoot $FirstPartyRoot -CommunitySkillsRoot $CommunityRoot -WithoutCatalog *>&1 | Out-String
   Assert-Contains $Output "duplicate-local-wins: local-first-test"
   Assert-Contains $Output "Updated managed oceans777 skill: managed-update-test"
-  Assert-Contains $Output "duplicate-unknown-marker: unknown-marker-test"
+  Assert-Contains $Output "duplicate-local-wins: unknown-marker-test"
   Assert-Contains $Output "duplicate-managed-source-mismatch: source-mismatch-test"
   Assert-FileContains (Join-Path $LocalTarget "SKILL.md") "local-version"
   Assert-FileContains (Join-Path $ManagedTarget "SKILL.md") "repo-version"

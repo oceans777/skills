@@ -2,6 +2,31 @@ if (-not (Get-Command Get-OceansIncludedSkillFiles -ErrorAction SilentlyContinue
   . (Join-Path $PSScriptRoot "skill-publish-rules.ps1")
 }
 
+function Set-OceansCanonicalSkillPermissions {
+  param([Parameter(Mandatory = $true)][string] $SkillPath)
+
+  $RootItem = Get-Item -LiteralPath $SkillPath -Force
+  if (-not $RootItem.PSIsContainer -or ($RootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Cannot normalize unsafe skill directory: $SkillPath"
+  }
+
+  if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    return
+  }
+
+  $Items = @($RootItem) + @(Get-ChildItem -LiteralPath $RootItem.FullName -Force -Recurse)
+  foreach ($Item in $Items) {
+    if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+      throw "Cannot normalize reparse point inside skill: $($Item.FullName)"
+    }
+    $Mode = if ($Item.PSIsContainer) { "755" } else { "644" }
+    & chmod $Mode -- $Item.FullName
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to normalize skill permissions: $($Item.FullName)"
+    }
+  }
+}
+
 function Get-OceansSkillContentSha256 {
   param([Parameter(Mandatory = $true)][string] $SkillPath)
 

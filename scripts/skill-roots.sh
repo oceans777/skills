@@ -73,6 +73,121 @@ absolute_path() {
   esac
 }
 
+oceans_valid_runtime_name() {
+  case "$1" in codex|agents|claude|openclaw|hermes|custom) return 0 ;; esac
+  return 1
+}
+
+oceans_runtime_registry_path() {
+  if [ -n "${OCEANS_RUNTIME_ROOTS_FILE:-}" ]; then
+    printf '%s\n' "$OCEANS_RUNTIME_ROOTS_FILE"
+    return
+  fi
+  state_home=${XDG_STATE_HOME:-$(oceans_home)/.local/state}
+  printf '%s/oceans777-skills/runtime-roots\n' "$state_home"
+}
+
+oceans_safe_runtime_record_value() {
+  value=$1
+  [ -n "$value" ] || return 1
+  if printf '%s' "$value" | LC_ALL=C grep -q '[|[:cntrl:]]'; then return 1; fi
+  return 0
+}
+
+oceans_register_runtime_root() (
+  runtime=$1
+  install_root=$2
+  oceans_valid_runtime_name "$runtime" || {
+    echo "Cannot register unsupported runtime: $runtime" >&2
+    return 1
+  }
+  [ -d "$install_root" ] && [ ! -L "$install_root" ] || {
+    echo "Cannot register unsafe runtime root: $install_root" >&2
+    return 1
+  }
+  resolved=$(absolute_path "$install_root")
+  oceans_safe_runtime_record_value "$resolved" || {
+    echo "Runtime root contains unsupported characters: $resolved" >&2
+    return 1
+  }
+
+  registry=$(oceans_runtime_registry_path)
+  registry_parent=$(dirname "$registry")
+  mkdir -p "$registry_parent"
+  [ ! -L "$registry_parent" ] || {
+    echo "Runtime registry parent must not be a symlink: $registry_parent" >&2
+    return 1
+  }
+  [ ! -e "$registry" ] || [ -f "$registry" ] || {
+    echo "Runtime registry is not a regular file: $registry" >&2
+    return 1
+  }
+  [ ! -L "$registry" ] || {
+    echo "Runtime registry must not be a symlink: $registry" >&2
+    return 1
+  }
+
+  lock=$registry.lock
+  if ! mkdir "$lock" 2>/dev/null; then
+    echo "Another runtime registry update is active: $registry" >&2
+    return 1
+  fi
+  cleanup_registry_update() {
+    rm -f "${tmp:-}"
+    rm -rf "$lock"
+  }
+  trap cleanup_registry_update EXIT HUP INT TERM
+
+  tmp=$(mktemp "$registry_parent/.runtime-roots.XXXXXX") || return 1
+  if [ -f "$registry" ]; then
+    while IFS='|' read -r existing_runtime existing_path extra || [ -n "${existing_runtime:-}${existing_path:-}${extra:-}" ]; do
+      [ -z "${extra:-}" ] || {
+        echo "Malformed runtime registry record: $registry" >&2
+        return 1
+      }
+      oceans_valid_runtime_name "${existing_runtime:-}" || {
+        echo "Malformed runtime registry runtime: ${existing_runtime:-}" >&2
+        return 1
+      }
+      oceans_safe_runtime_record_value "${existing_path:-}" || {
+        echo "Malformed runtime registry path." >&2
+        return 1
+      }
+      [ "$existing_path" = "$resolved" ] || printf '%s|%s\n' "$existing_runtime" "$existing_path" >> "$tmp"
+    done < "$registry"
+  fi
+  printf '%s|%s\n' "$runtime" "$resolved" >> "$tmp"
+  LC_ALL=C sort -u "$tmp" -o "$tmp"
+  mv "$tmp" "$registry"
+  tmp=
+)
+
+oceans_list_registered_root_records() {
+  registry=$(oceans_runtime_registry_path)
+  [ -f "$registry" ] || return 0
+  [ ! -L "$registry" ] || {
+    echo "Runtime registry must not be a symlink: $registry" >&2
+    return 1
+  }
+  while IFS='|' read -r runtime resolved extra || [ -n "${runtime:-}${resolved:-}${extra:-}" ]; do
+    [ -z "${extra:-}" ] || {
+      echo "Malformed runtime registry record: $registry" >&2
+      return 1
+    }
+    oceans_valid_runtime_name "${runtime:-}" || {
+      echo "Malformed runtime registry runtime: ${runtime:-}" >&2
+      return 1
+    }
+    oceans_safe_runtime_record_value "${resolved:-}" || {
+      echo "Malformed runtime registry path." >&2
+      return 1
+    }
+    if [ -d "$resolved" ] && [ ! -L "$resolved" ]; then
+      printf '%s|%s\n' "$runtime" "$(absolute_path "$resolved")"
+    fi
+  done < "$registry"
+}
+
 print_root_record() {
   runtime=$1
   status=$2
@@ -87,21 +202,9 @@ print_root_record() {
 
 list_runtime_roots() {
   for runtime in codex agents claude openclaw hermes; do
-    seen=
     runtime_candidates "$runtime" | while IFS= read -r candidate; do
       [ -n "$candidate" ] || continue
       resolved=$(absolute_path "$candidate")
-      case "
-$seen
-" in
-        *"
-$resolved
-"*)
-          continue
-          ;;
-      esac
-      seen="${seen}
-$resolved"
       if [ -d "$resolved" ]; then
         print_root_record "$runtime" exists "$resolved" "runtime skills root exists"
       else
@@ -109,6 +212,11 @@ $resolved"
       fi
       echo
     done
+  done
+  oceans_list_registered_root_records | while IFS='|' read -r runtime resolved; do
+    [ -n "$runtime" ] || continue
+    print_root_record "$runtime" exists "$resolved" "registered runtime skills root"
+    echo
   done
 }
 
@@ -169,37 +277,31 @@ EOF
 list_existing_roots() {
   list_existing_root_records | while IFS='|' read -r runtime resolved; do
     [ -n "$runtime" ] || continue
-    print_root_record "$runtime" exists "$resolved" "runtime skills root exists"
+    print_root_record "$runtime" exists "$resolved" "known runtime skills root"
     echo
   done
 }
 
 list_existing_root_records() {
+  records=$(mktemp "${TMPDIR:-/tmp}/oceans-runtime-roots.XXXXXX") || return 1
   for runtime in codex agents claude openclaw hermes; do
-    seen=
     candidates=$(runtime_candidates "$runtime")
     while IFS= read -r candidate; do
       [ -n "$candidate" ] || continue
       resolved=$(absolute_path "$candidate")
-      case "
-$seen
-" in
-        *"
-$resolved
-"*)
-          continue
-          ;;
-      esac
-      seen="${seen}
-$resolved"
-      if [ -d "$resolved" ]; then
-        printf '%s|%s\n' "$runtime" "$resolved"
+      if [ -d "$resolved" ] && [ ! -L "$resolved" ]; then
+        printf '%s|%s\n' "$runtime" "$resolved" >> "$records"
       fi
     done <<EOF
 $candidates
 EOF
-    true
   done
+  oceans_list_registered_root_records >> "$records" || {
+    rm -f "$records"
+    return 1
+  }
+  awk -F'|' 'NF == 2 && !seen[$2]++ { print $1 "|" $2 }' "$records"
+  rm -f "$records"
 }
 
 if [ "${SKILL_ROOTS_LIB_ONLY:-0}" = "1" ]; then
@@ -243,14 +345,10 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-case "$RUNTIME" in
-  codex|agents|claude|openclaw|hermes|custom)
-    ;;
-  *)
-    echo "unsupported-runtime: $RUNTIME" >&2
-    exit 2
-    ;;
-esac
+oceans_valid_runtime_name "$RUNTIME" || {
+  echo "unsupported-runtime: $RUNTIME" >&2
+  exit 2
+}
 
 case "$MODE" in
   list)

@@ -7,4 +7,4 @@ Set-Location $RepoRoot
 Invoke-GitWithRetry -Description "Pull entry repository" -Arguments @("pull", "--ff-only") -Attempts 3 -DelaySeconds 5
 Invoke-Git -Description "Sync child repository URLs" -Arguments @("submodule", "sync", "--recursive")
 Invoke-GitWithRetry -Description "Update child repositories" -Arguments @("submodule", "update", "--init", "--recursive") -Attempts 3 -DelaySeconds 5
-& "$RepoRoot\scripts\install-skills.ps1" -AllExistingRuntimes -ReconcileOnly
+& "$RepoRoot\scripts\install-skills.ps1" -AllExistingRuntimes -ReconcileOnly -LifecycleReconcile -BestEffortRoots

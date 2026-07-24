@@ -96,11 +96,20 @@ reconcile_runtime() {
     return
   fi
 
-  set -- --first-party-root "$FIRST_PARTY_ROOT" --community-root "$COMMUNITY_ROOT" --catalog-root "$CATALOG_ROOT"
+  set -- \
+    --first-party-root "$FIRST_PARTY_ROOT" \
+    --community-root "$COMMUNITY_ROOT" \
+    --catalog-root "$CATALOG_ROOT" \
+    --target-skill "$SKILL" \
+    --lifecycle-reconcile \
+    --best-effort-roots
   if [ -n "$INSTALL_ROOT" ]; then
     set -- "$@" --install-root "$INSTALL_ROOT"
   else
-    existing_roots=$(list_existing_root_records)
+    if ! existing_roots=$(list_existing_root_records); then
+      echo "Unable to enumerate known runtime roots." >&2
+      exit 1
+    fi
     if [ -z "$existing_roots" ]; then
       echo "runtime-reconcile: no-existing-roots"
       return
@@ -110,7 +119,7 @@ reconcile_runtime() {
   [ "$target_status" = active ] || set -- "$@" --reconcile-only
 
   if ! sh "$SCRIPT_DIR/install-skills.sh" "$@"; then
-    echo "Lifecycle state was committed, but runtime reconciliation failed." >&2
+    echo "Lifecycle state was committed, but one or more runtime roots were not reconciled." >&2
     exit 1
   fi
 }
@@ -133,6 +142,7 @@ validate_candidate() {
     done
   fi
   oceans_valid_sha256 "$CANDIDATE_CONTENT_SHA256" || { echo "Candidate content SHA-256 is missing or invalid: $SKILL" >&2; return 1; }
+  oceans_normalize_skill_permissions "$candidate_root" || return 1
   actual_candidate_sha256=$(oceans_skill_content_sha256 "$candidate_root") || return 1
   [ "$actual_candidate_sha256" = "$CANDIDATE_CONTENT_SHA256" ] || {
     echo "Candidate content changed after intake: $SKILL. Expected $CANDIDATE_CONTENT_SHA256, got $actual_candidate_sha256" >&2
@@ -191,7 +201,7 @@ promote_candidate() {
     mv "$review_hold" "$REVIEW_PATH"
     exit 1
   }
-  if cp -R "$review_hold"/. "$staging_path" && oceans_remove_excluded_paths "$staging_path"; then
+  if cp -R "$review_hold"/. "$staging_path" && oceans_remove_excluded_paths "$staging_path" && oceans_normalize_skill_permissions "$staging_path"; then
     staged_content_sha256=$(oceans_skill_content_sha256 "$staging_path" || true)
     if [ "$staged_content_sha256" = "$expected_content_sha256" ] && oceans_commit_staged_directory "$staging_path" "$target_path"; then
       published_content_sha256=$(oceans_skill_content_sha256 "$target_path" || true)

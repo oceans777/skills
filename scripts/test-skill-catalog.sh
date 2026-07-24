@@ -10,6 +10,7 @@ CATALOG=$TEST_ROOT/catalog
 INSTALL=$TEST_ROOT/runtime/skills
 COMMIT_A=0123456789012345678901234567890123456789
 COMMIT_B=abcdefabcdefabcdefabcdefabcdefabcdefabcd
+export OCEANS_RUNTIME_ROOTS_FILE=$TEST_ROOT/runtime-roots
 cleanup() { rm -rf "$TEST_ROOT"; }
 trap cleanup EXIT HUP INT TERM
 mkdir -p "$FIRST" "$COMMUNITY" "$CATALOG/skills" "$CATALOG/review-queue/oceans-skills" "$CATALOG/review-queue/community-skills" "$INSTALL"
@@ -89,7 +90,7 @@ rm -f "$INSTALL/archived-skill/.oceans-skill-source"
 if sh "$REPO_ROOT/scripts/catalog-skill.sh" block --catalog-root "$CATALOG" --first-party-root "$FIRST" --community-root "$COMMUNITY" --install-root "$INSTALL" --skill archived-skill --reason second-incident >"$TEST_ROOT/block-output" 2>"$TEST_ROOT/block-error"; then
   fail "Block incorrectly reported success for an unmanaged local copy."
 fi
-assert_file_contains "$TEST_ROOT/block-error" "runtime reconciliation failed"
+assert_file_contains "$TEST_ROOT/block-error" "one or more runtime roots were not reconciled"
 assert_file_contains "$INSTALL/archived-skill/SKILL.md" version=archived
 [ "$(oceans_catalog_record_value "$RECORD" status)" = blocked ] || fail "Security state did not remain blocked after unmanaged runtime conflict."
 rm -rf "$INSTALL/archived-skill"
