@@ -27,6 +27,26 @@ function Set-OceansCanonicalSkillPermissions {
   }
 }
 
+function Get-OceansCanonicalTextSha256 {
+  param([Parameter(Mandatory = $true)][string] $Path)
+
+  $StrictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+  $CanonicalUtf8 = New-Object System.Text.UTF8Encoding($false)
+  try {
+    $Text = $StrictUtf8.GetString([System.IO.File]::ReadAllBytes($Path))
+  } catch {
+    throw "Cannot canonicalize non-UTF-8 skill text: $Path"
+  }
+  $CanonicalText = $Text.Replace("`r`n", "`n").Replace("`r", "`n")
+  $Bytes = $CanonicalUtf8.GetBytes($CanonicalText)
+  $Hasher = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    return ([BitConverter]::ToString($Hasher.ComputeHash($Bytes))).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $Hasher.Dispose()
+  }
+}
+
 function Get-OceansSkillContentSha256 {
   param([Parameter(Mandatory = $true)][string] $SkillPath)
 
@@ -39,7 +59,7 @@ function Get-OceansSkillContentSha256 {
       [System.IO.Path]::AltDirectorySeparatorChar
     ).Replace('\', '/')
     $PathHex = ([BitConverter]::ToString($Utf8.GetBytes($RelativePath))).Replace('-', '').ToLowerInvariant()
-    $FileHash = (Get-FileHash -LiteralPath $File.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $FileHash = Get-OceansCanonicalTextSha256 -Path $File.FullName
     $Entries.Add("$PathHex $FileHash")
   }
 
