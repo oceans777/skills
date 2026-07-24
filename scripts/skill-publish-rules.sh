@@ -105,7 +105,7 @@ oceans_frontmatter_value() {
         gsub(/^[ \t]+/, "", line)
         gsub(/[ \t]+$/, "", line)
         if ((substr(line, 1, 1) == "\"" && substr(line, length(line), 1) == "\"") ||
-            (substr(line, 1, 1) == "'"'"'" && substr(line, length(line), 1) == "'"'"'")) {
+            (substr(line, 1, 1) == "'" && substr(line, length(line), 1) == "'")) {
           line = substr(line, 2, length(line) - 2)
         }
         if (line ~ /^[|>][-+]?[0-9]*$/) {
@@ -140,17 +140,45 @@ oceans_frontmatter_structure_issues() {
   awk '
     BEGIN {
       allowed["name"] = allowed["description"] = allowed["license"] = 1
-      allowed["allowed-tools"] = allowed["metadata"] = 1
+      allowed["compatibility"] = allowed["allowed-tools"] = allowed["metadata"] = 1
+      allowed["when_to_use"] = allowed["argument-hint"] = allowed["arguments"] = 1
+      allowed["disable-model-invocation"] = allowed["user-invocable"] = 1
+      allowed["disallowed-tools"] = allowed["model"] = allowed["effort"] = 1
+      allowed["context"] = allowed["agent"] = allowed["background"] = 1
+      allowed["hooks"] = allowed["paths"] = allowed["shell"] = 1
+      boolean_key["disable-model-invocation"] = boolean_key["user-invocable"] = boolean_key["background"] = 1
     }
     { sub(/\r$/, "") }
     NR == 1 { next }
     $0 == "---" { exit }
     /^[^ \t][A-Za-z0-9_-]*[ \t]*:/ {
-      line = $0
-      sub(/[ \t]*:.*/, "", line)
-      key = tolower(line)
+      full_line = $0
+      key_line = full_line
+      sub(/[ \t]*:.*/, "", key_line)
+      key = tolower(key_line)
+      value = full_line
+      sub(/^[^:]*:[ \t]*/, "", value)
+      sub(/[ \t]*$/, "", value)
       if (++seen[key] > 1) print "risk: duplicate frontmatter key: " key
       if (!allowed[key]) print "risk: unsupported frontmatter key: " key
+      normalized_value = value
+      if ((substr(normalized_value, 1, 1) == "\"" && substr(normalized_value, length(normalized_value), 1) == "\"") ||
+          (substr(normalized_value, 1, 1) == "'" && substr(normalized_value, length(normalized_value), 1) == "'")) {
+        normalized_value = substr(normalized_value, 2, length(normalized_value) - 2)
+      }
+      if (boolean_key[key] && value !~ /^(true|false)$/) {
+        print "risk: " key " must be a boolean"
+      }
+      if (key == "compatibility") {
+        if (value == "" || value ~ /^[|>][-+]?[0-9]*$/) {
+          print "risk: compatibility must be a non-empty single-line string"
+        } else if (length(normalized_value) > 500) {
+          print "risk: compatibility is too long"
+        }
+      }
+      if (key == "argument-hint" && (value == "" || value ~ /^[|>][-+]?[0-9]*$/)) {
+        print "risk: argument-hint must be a non-empty single-line string"
+      }
     }
   ' "$skill_file"
 }

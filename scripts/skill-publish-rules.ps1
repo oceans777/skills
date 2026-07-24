@@ -55,19 +55,38 @@ function Get-OceansSkillFrontmatter {
     return [PSCustomObject]@{ HasFrontmatter = $false; Values = $Values; Issues = $Issues }
   }
 
-  $AllowedKeys = @('name', 'description', 'license', 'allowed-tools', 'metadata')
+  $AllowedKeys = @(
+    'name', 'description', 'license', 'compatibility', 'allowed-tools', 'metadata',
+    'when_to_use', 'argument-hint', 'arguments', 'disable-model-invocation',
+    'user-invocable', 'disallowed-tools', 'model', 'effort', 'context', 'agent',
+    'background', 'hooks', 'paths', 'shell'
+  )
+  $BooleanKeys = @('disable-model-invocation', 'user-invocable', 'background')
   for ($Index = 1; $Index -lt $ClosingIndex; $Index++) {
     $Line = $Lines[$Index]
     if ($Line -match '^\s') { continue }
     if ($Line -match '^([A-Za-z0-9_-]+)\s*:\s*(.*?)\s*$') {
       $Key = $Matches[1].ToLowerInvariant()
-      $Value = $Matches[2].Trim()
+      $RawValue = $Matches[2].Trim()
+      $Value = $RawValue
       if ($Values.ContainsKey($Key)) {
         $Issues.Add("risk: duplicate frontmatter key: $Key")
         continue
       }
       if ($AllowedKeys -notcontains $Key) {
         $Issues.Add("risk: unsupported frontmatter key: $Key")
+      }
+      if (($BooleanKeys -contains $Key) -and (@('true', 'false') -cnotcontains $RawValue)) {
+        $Issues.Add("risk: $Key must be a boolean")
+      }
+      if ($Key -eq 'compatibility') {
+        if ([string]::IsNullOrWhiteSpace($RawValue) -or $RawValue -match '^[|>][-+]?[0-9]*$') {
+          $Issues.Add('risk: compatibility must be a non-empty single-line string')
+        }
+      }
+      if ($Key -eq 'argument-hint' -and
+          ([string]::IsNullOrWhiteSpace($RawValue) -or $RawValue -match '^[|>][-+]?[0-9]*$')) {
+        $Issues.Add('risk: argument-hint must be a non-empty single-line string')
       }
       if ($Value -match '^[|>][-+]?[0-9]*$') {
         $BlockLines = New-Object System.Collections.Generic.List[string]
@@ -81,6 +100,9 @@ function Get-OceansSkillFrontmatter {
       } elseif (($Value.StartsWith('"') -and $Value.EndsWith('"')) -or
           ($Value.StartsWith("'") -and $Value.EndsWith("'"))) {
         $Value = $Value.Substring(1, [Math]::Max(0, $Value.Length - 2))
+      }
+      if ($Key -eq 'compatibility' -and $Value.Length -gt 500) {
+        $Issues.Add('risk: compatibility is too long')
       }
       $Values[$Key] = $Value
     }
