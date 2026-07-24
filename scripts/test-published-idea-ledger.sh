@@ -5,6 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-published-idea-ledger.XXXXXX")
 TEST_ROOT=$(CDPATH= cd "$TEST_ROOT" && pwd -P)
+. "$REPO_ROOT/scripts/skill-content-hash.sh"
 
 cleanup() { rm -rf "$TEST_ROOT"; }
 trap cleanup EXIT INT TERM
@@ -12,6 +13,10 @@ trap cleanup EXIT INT TERM
 assert_contains() { case "$1" in *"$2"*) ;; *) echo "Expected output to contain: $2" >&2; exit 1 ;; esac; }
 assert_path_exists() { [ -e "$1" ] || { echo "Expected path to exist: $1" >&2; exit 1; }; }
 assert_file_contains() { grep -F -q "$2" "$1" || { echo "Expected $1 to contain: $2" >&2; exit 1; }; }
+
+PUBLISHED_SKILL=$REPO_ROOT/repos/oceans-skills/skills/idea-ledger
+CONTENT_SHA256=$(oceans_skill_content_sha256 "$PUBLISHED_SKILL")
+printf 'idea-ledger-content-sha256=%s\n' "$CONTENT_SHA256"
 
 CODEX_HOME=$TEST_ROOT/codex
 AGENTS_HOME=$TEST_ROOT/agents
