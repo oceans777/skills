@@ -11,12 +11,14 @@ cleanup() { rm -rf "$TEST_ROOT"; }
 trap cleanup EXIT INT TERM
 
 assert_contains() { case "$1" in *"$2"*) ;; *) echo "Expected output to contain: $2" >&2; exit 1 ;; esac; }
+assert_not_contains() { case "$1" in *"$2"*) echo "Expected output not to contain: $2" >&2; exit 1 ;; *) ;; esac; }
 assert_path_exists() { [ -e "$1" ] || { echo "Expected path to exist: $1" >&2; exit 1; }; }
 assert_file_contains() { grep -F -q "$2" "$1" || { echo "Expected $1 to contain: $2" >&2; exit 1; }; }
 
 PUBLISHED_SKILL=$REPO_ROOT/repos/oceans-skills/skills/idea-ledger
 CONTENT_SHA256=$(oceans_skill_content_sha256 "$PUBLISHED_SKILL")
 printf 'idea-ledger-content-sha256=%s\n' "$CONTENT_SHA256"
+assert_file_contains "$REPO_ROOT/catalog/skills/idea-ledger.skill" "content_sha256=$CONTENT_SHA256"
 
 CODEX_HOME=$TEST_ROOT/codex
 AGENTS_HOME=$TEST_ROOT/agents
@@ -31,7 +33,8 @@ for runtime_home in "$CODEX_HOME" "$AGENTS_HOME" "$CLAUDE_HOME" "$OPENCLAW_HOME"
   mkdir -p "$runtime_home/skills"
 done
 
-OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" --all-existing-runtimes)
+OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" --all-existing-runtimes 2>&1)
+assert_not_contains "$OUTPUT" "legacy package without catalog content SHA-256: idea-ledger"
 
 verify_runtime() {
   runtime=$1
@@ -65,4 +68,5 @@ python "$CODEX_CLI" validate --root "$PROJECT_ROOT" >/dev/null
 python "$CODEX_CLI" status --root "$PROJECT_ROOT" --json >/dev/null
 assert_path_exists "$PROJECT_ROOT/.idea-ledger/config.json"
 
+printf '%s\n' "$OUTPUT"
 printf '%s\n' "Published idea-ledger install and runtime verification passed."
