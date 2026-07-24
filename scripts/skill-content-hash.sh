@@ -16,9 +16,46 @@ oceans_sha256_file() {
   return 1
 }
 
-# Skill packages are text-only and are invoked through an explicit interpreter.
-# Canonical permissions remove executable-bit drift without making the package
-# fingerprint platform-dependent.
+oceans_canonical_text_sha256() {
+  file=$1
+  canonical=$(mktemp "${TMPDIR:-/tmp}/oceans-skill-canonical.XXXXXX") || return 1
+
+  if command -v perl >/dev/null 2>&1; then
+    if ! perl -MEncode=decode,encode -0777 -ne '
+      $text = decode("UTF-8", $_, 1);
+      $text =~ s/\r\n?/\n/g;
+      print encode("UTF-8", $text);
+    ' "$file" > "$canonical"; then
+      rm -f "$canonical"
+      echo "Cannot canonicalize non-UTF-8 skill text: $file" >&2
+      return 1
+    fi
+  elif command -v python3 >/dev/null 2>&1; then
+    if ! python3 -c 'import pathlib, sys; data = pathlib.Path(sys.argv[1]).read_bytes(); text = data.decode("utf-8", "strict").replace("\r\n", "\n").replace("\r", "\n"); sys.stdout.buffer.write(text.encode("utf-8"))' "$file" > "$canonical"; then
+      rm -f "$canonical"
+      echo "Cannot canonicalize non-UTF-8 skill text: $file" >&2
+      return 1
+    fi
+  elif command -v python >/dev/null 2>&1; then
+    if ! python -c 'import pathlib, sys; data = pathlib.Path(sys.argv[1]).read_bytes(); text = data.decode("utf-8", "strict").replace("\r\n", "\n").replace("\r", "\n"); sys.stdout.buffer.write(text.encode("utf-8"))' "$file" > "$canonical"; then
+      rm -f "$canonical"
+      echo "Cannot canonicalize non-UTF-8 skill text: $file" >&2
+      return 1
+    fi
+  else
+    rm -f "$canonical"
+    echo "No strict UTF-8 canonicalizer is available." >&2
+    return 1
+  fi
+
+  digest=$(oceans_sha256_file "$canonical") || { rm -f "$canonical"; return 1; }
+  rm -f "$canonical"
+  printf '%s\n' "$digest"
+}
+
+# Skill packages are strict UTF-8 text and are invoked through an explicit
+# interpreter. Canonical permissions and LF line endings remove platform drift
+# without weakening content integrity.
 oceans_normalize_skill_permissions() {
   skill_path=$1
   [ -d "$skill_path" ] && [ ! -L "$skill_path" ] || {
@@ -44,7 +81,7 @@ oceans_skill_content_sha256() {
     [ -n "$file" ] || continue
     relative=${file#"$root"/}
     path_hex=$(printf '%s' "$relative" | od -An -tx1 | tr -d ' \n')
-    file_hash=$(oceans_sha256_file "$file") || { rm -f "$manifest" "$unsorted" "$files"; return 1; }
+    file_hash=$(oceans_canonical_text_sha256 "$file") || { rm -f "$manifest" "$unsorted" "$files"; return 1; }
     printf '%s %s\n' "$path_hex" "$file_hash" >> "$unsorted"
   done < "$files"
   LC_ALL=C sort "$unsorted" > "$manifest"
