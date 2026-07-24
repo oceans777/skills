@@ -41,6 +41,7 @@ jobs:
           - test-frontmatter-extensions.sh
           - test-install-local-first.sh
           - test-publish-skills.sh
+          - test-published-idea-ledger.sh
           - test-runtime-reconciliation.sh
           - test-skill-catalog.sh
           - test-validate-duplicates.sh
@@ -106,6 +107,7 @@ jobs:
           - test-frontmatter-extensions.ps1
           - test-install-local-first.ps1
           - test-publish-skills.ps1
+          - test-published-idea-ledger.ps1
           - test-runtime-reconciliation.ps1
           - test-skill-catalog.ps1
           - test-validate-duplicates.ps1
