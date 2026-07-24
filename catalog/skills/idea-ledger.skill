@@ -1,0 +1,16 @@
+schema_version=2
+name=idea-ledger
+status=active
+package_repository=oceans-skills
+upstream_repository=https://github.com/oceans777/oceans-skills
+upstream_path=skills/idea-ledger
+upstream_ref=main
+upstream_commit=fd9883cdca4844ee9fd613724f2fc048ed9fb29f
+candidate_upstream_repository=
+candidate_upstream_path=
+candidate_upstream_ref=
+candidate_upstream_commit=
+replacement=
+status_reason=
+transition_note=publish idea-ledger v2.1.0
+updated_at=2026-07-24T09:27:31Z
