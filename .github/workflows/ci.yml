@@ -38,6 +38,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         test:
           - test-add-skill-from-url.sh
+          - test-content-hash-canonicalization.sh
           - test-frontmatter-extensions.sh
           - test-install-local-first.sh
           - test-publish-skills.sh
@@ -104,6 +105,7 @@ jobs:
       matrix:
         test:
           - test-add-skill-from-url.ps1
+          - test-content-hash-canonicalization.ps1
           - test-frontmatter-extensions.ps1
           - test-install-local-first.ps1
           - test-publish-skills.ps1
