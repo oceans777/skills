@@ -14,6 +14,7 @@ assert_contains() { case "$1" in *"$2"*) ;; *) echo "Expected output to contain:
 assert_not_contains() { case "$1" in *"$2"*) echo "Expected output not to contain: $2" >&2; exit 1 ;; *) ;; esac; }
 assert_path_exists() { [ -e "$1" ] || { echo "Expected path to exist: $1" >&2; exit 1; }; }
 assert_file_contains() { grep -F -q "$2" "$1" || { echo "Expected $1 to contain: $2" >&2; exit 1; }; }
+assert_file_not_contains() { grep -F -q "$2" "$1" && { echo "Expected $1 not to contain: $2" >&2; exit 1; } || :; }
 
 PUBLISHED_SKILL=$REPO_ROOT/repos/oceans-skills/skills/idea-ledger
 CONTENT_SHA256=$(oceans_skill_content_sha256 "$PUBLISHED_SKILL")
@@ -47,11 +48,13 @@ verify_runtime() {
   assert_path_exists "$skill/SKILL.md"
   assert_path_exists "$skill/LICENSE"
   assert_path_exists "$cli"
-  assert_file_contains "$skill/SKILL.md" "disable-model-invocation: true"
+  assert_file_contains "$skill/SKILL.md" "## Governing charter first"
+  assert_file_contains "$skill/agents/openai.yaml" "allow_implicit_invocation: true"
+  assert_file_not_contains "$skill/SKILL.md" "disable-model-invocation: true"
   assert_file_contains "$marker" "source_repository=oceans-skills"
   assert_file_contains "$marker" "runtime=$runtime"
   version=$(python "$cli" --version)
-  [ "$version" = "2.1.0" ] || { echo "Unexpected idea-ledger version in $runtime: $version" >&2; exit 1; }
+  [ "$version" = "2.3.0" ] || { echo "Unexpected idea-ledger version in $runtime: $version" >&2; exit 1; }
 }
 
 verify_runtime codex "$CODEX_HOME/skills"
@@ -64,9 +67,12 @@ PROJECT_ROOT=$TEST_ROOT/project
 mkdir -p "$PROJECT_ROOT"
 CODEX_CLI=$CODEX_HOME/skills/idea-ledger/scripts/idea_ledger.py
 python "$CODEX_CLI" init --root "$PROJECT_ROOT" >/dev/null
+python "$CODEX_CLI" new --root "$PROJECT_ROOT" \
+  --input "$CODEX_HOME/skills/idea-ledger/examples/proposal-0001-local-first.json" >/dev/null
 python "$CODEX_CLI" validate --root "$PROJECT_ROOT" >/dev/null
 python "$CODEX_CLI" status --root "$PROJECT_ROOT" --json >/dev/null
 assert_path_exists "$PROJECT_ROOT/.idea-ledger/config.json"
+assert_file_contains "$PROJECT_ROOT/docs/idea-ledger/records/IDEA-0001.md" "## 总纲领（管理员与操作者先看）"
 
 printf '%s\n' "$OUTPUT"
 printf '%s\n' "Published idea-ledger install and runtime verification passed."

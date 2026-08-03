@@ -14,6 +14,11 @@ function Assert-FileContains([string] $Path, [string] $Expected) {
   if (-not $Text.Contains($Expected)) { throw "Expected $Path to contain: $Expected" }
 }
 
+function Assert-FileNotContains([string] $Path, [string] $Expected) {
+  $Text = Get-Content -LiteralPath $Path -Raw
+  if ($Text.Contains($Expected)) { throw "Expected $Path not to contain: $Expected" }
+}
+
 function Remove-TestRoot {
   if (-not (Test-Path -LiteralPath $TestRoot)) { return }
   $ResolvedRoot = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $TestRoot).Path)
@@ -72,11 +77,13 @@ try {
     Assert-PathExists (Join-Path $Skill "SKILL.md")
     Assert-PathExists (Join-Path $Skill "LICENSE")
     Assert-PathExists $Cli
-    Assert-FileContains (Join-Path $Skill "SKILL.md") "disable-model-invocation: true"
+    Assert-FileContains (Join-Path $Skill "SKILL.md") "## Governing charter first"
+    Assert-FileContains (Join-Path $Skill "agents\openai.yaml") "allow_implicit_invocation: true"
+    Assert-FileNotContains (Join-Path $Skill "SKILL.md") "disable-model-invocation: true"
     Assert-FileContains $Marker "source_repository=oceans-skills"
     Assert-FileContains $Marker "runtime=$($Target.Runtime)"
     $Version = (& python $Cli --version | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $Version -ne "2.1.0") {
+    if ($LASTEXITCODE -ne 0 -or $Version -ne "2.3.0") {
       throw "Unexpected idea-ledger version in $($Target.Runtime): $Version"
     }
   }
@@ -86,11 +93,15 @@ try {
   $CodexCli = Join-Path $env:CODEX_HOME "skills\idea-ledger\scripts\idea_ledger.py"
   & python $CodexCli init --root $ProjectRoot | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "idea-ledger init failed" }
+  $Example = Join-Path $env:CODEX_HOME "skills\idea-ledger\examples\proposal-0001-local-first.json"
+  & python $CodexCli new --root $ProjectRoot --input $Example | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "idea-ledger new failed" }
   & python $CodexCli validate --root $ProjectRoot | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "idea-ledger validate failed" }
   & python $CodexCli status --root $ProjectRoot --json | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "idea-ledger status failed" }
   Assert-PathExists (Join-Path $ProjectRoot ".idea-ledger\config.json")
+  Assert-FileContains (Join-Path $ProjectRoot "docs\idea-ledger\records\IDEA-0001.md") "## 总纲领（管理员与操作者先看）"
 
   Write-Host $InstallText
   Write-Host "Published idea-ledger install and runtime verification passed."
