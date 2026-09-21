@@ -1,6 +1,6 @@
 schema_version=2
 name=experience-triage
-status=active
+status=archived
 package_repository=oceans-skills
 upstream_repository=https://github.com/oceans777/oceans-skills
 upstream_path=skills/experience-triage
@@ -11,6 +11,6 @@ candidate_upstream_path=
 candidate_upstream_ref=
 candidate_upstream_commit=
 replacement=
-status_reason=
-transition_note=publish first-party skill hardening
-updated_at=2026-07-24T00:00:00Z
+status_reason=archived by maintainer; git-upstream-sync-guard is the only active skill
+transition_note=archive prior skill during git-upstream-sync-guard activation
+updated_at=2026-09-21T02:58:13Z
