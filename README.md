@@ -1,12 +1,83 @@
-# oceans777 Skills
+# oceans777（海洋技能库）
 
-This is the entry repository for all public oceans777 skills.
+面向 AI（人工智能）编程助手的 Skill（技能）集合。
 
-You only need to clone this repository. It connects to the first-party and community skill repositories, installs skills into local agent skill directories, and gives you one command entry point for future updates.
+**选一个需要的技能，把下面对应的完整安装句子发给编程助手即可。你不需要自己记住克隆命令、安装目录或脚本参数。**
 
-## Quick Start
+## 可用技能
 
-### Windows
+### prd-blueprint（需求文档总纲技能）
+
+当你明确要求编写或更新 PRD（产品需求文档）时，把当前可访问的讨论整理成“一句话目的＋功能清单＋验收标准”的独立总纲，再展开完整文档，并在对话中原样展示总纲。详细需求必须对应总纲，帮助发现遗漏、擅自扩展和验收缩水。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/oceans-skills/tree/main/skills/prd-blueprint
+```
+
+**使用示例：**
+
+> 使用 prd-blueprint（需求文档总纲技能），把我们刚才讨论的内容写成产品需求文档。
+
+普通讨论、仅提及需求文档或明确要求暂不写文档时，不应触发文档生成。这个技能不自动启动开发，也不创建半小时定时核查任务。
+
+[查看技能说明与完整文档](https://github.com/oceans777/oceans-skills/tree/main/docs/prd-blueprint) · [查看发布状态](catalog/skills/prd-blueprint.skill)
+
+### git-upstream-sync-guard（上游代码同步保护技能）
+
+用于持续接收官方更新的二次开发项目：区分上游镜像和自己的定制代码，同步前做预检，验证通过后再进入后续分支。出现冲突、工作区不干净或分支异常时先停止核查，不用强制覆盖掩盖问题。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/oceans-skills/tree/main/skills/git-upstream-sync-guard
+```
+
+**使用示例：**
+
+> 使用 git-upstream-sync-guard（上游代码同步保护技能），先检查当前项目的上游同步方案，暂时不要合并代码。
+
+[查看技能说明](https://github.com/oceans777/oceans-skills/blob/main/skills/git-upstream-sync-guard/SKILL.md) · [查看发布状态](catalog/skills/git-upstream-sync-guard.skill)
+
+## 安装后怎么用
+
+先让助手确认技能已被当前项目识别，再发送上面的使用示例。之后可以正常描述需求，由支持自动匹配的助手按触发条件选择技能；没有匹配时，直接说“使用某某技能”。**文件已复制不等于已识别，也不等于每次都会自动触发。**
+
+“一句话安装”是发给编程助手的请求，不是终端命令。助手需要支持技能、能够访问仓库，并获得目标目录的写入权限；不能访问你电脑的普通网页对话，不能直接完成本地安装。
+
+<details>
+<summary>安装范围、更新与结果核对</summary>
+
+- 上面的句子指定“当前项目”。助手应确认项目根目录和当前工具支持的项目技能目录，只安装选中的技能；不支持项目级安装时应说明，不能悄悄改成全局安装。
+- 安装应包含完整技能目录及其模板、引用资料和脚本，不能只复制 `SKILL.md`（技能说明文件）。仅在取得必要权限后执行安装；遇到同名文件或本地修改先保留并报告。
+- 安装后应回报实际位置、来源版本和宿主识别结果。需要重新加载或重启时明确提示；未验证的部分不能标成成功。不因安装技能而改写业务代码、覆盖项目规则或创建定时任务。
+- 上面的链接指向单个技能的源码目录。直接安装不等于使用本仓库的托管安装流程，不自动获得本仓库的版本固定、来源标记、内容指纹校验或归档停用管理。
+- 单技能更新应沿用原安装方式，并先保留本地修改。已经使用本仓库托管安装的目录，应继续通过入口更新，避免混用安装方式覆盖管理标记；完整流程见[命令说明](docs/commands.md)和[技能生命周期](docs/skill-lifecycle.md)。
+
+</details>
+
+<details>
+<summary>已归档技能与完整目录</summary>
+
+首页仅推荐当前启用的技能。完整状态、归档原因和替代关系以[技能目录](catalog/skills)为准，状态含义见[技能生命周期](docs/skill-lifecycle.md)。
+
+本入口的托管安装会跳过已归档技能，并按生命周期规则处理带有有效来源标记的已有副本。归档不会删除远端源码；通过第三方安装器或手工复制的副本不自动纳入本入口管理，不能把“源码仍可下载”当成“仍在推荐使用”。
+
+</details>
+
+## 高级使用与维护
+
+普通使用者到这里即可。需要批量安装、统一更新或维护仓库时，再查看下面的内容。
+
+<details>
+<summary>备用：通过入口仓库批量安装</summary>
+
+这不是上面的单技能项目级安装。默认初始化面向 Codex（编程助手）的用户级技能目录，安装当前启用的技能；不要为了安装一个项目技能，直接执行这套默认批量流程。
+
+需先安装 Git（版本控制工具），并具备访问入口及子仓库的网络条件。在业务项目之外选择存放入口仓库的位置。
+
+**Windows（视窗操作系统）：** 在 PowerShell（命令行环境）中执行：
 
 ```powershell
 git clone https://github.com/oceans777/skills.git
@@ -14,7 +85,7 @@ cd skills
 .\setup.ps1
 ```
 
-### Ubuntu
+**Ubuntu（乌班图操作系统）或 macOS（苹果电脑操作系统）：** 在终端中执行：
 
 ```sh
 git clone https://github.com/oceans777/skills.git
@@ -22,580 +93,31 @@ cd skills
 ./setup.sh
 ```
 
-### macOS
+`setup.ps1`（视窗初始化脚本）和 `setup.sh`（终端初始化脚本）会初始化固定版本的子仓库，无需用户另记子仓库命令。
 
-```sh
-git clone https://github.com/oceans777/skills.git
-cd skills
-./setup.sh
-```
-
-These are the recommended setup flows. `setup.ps1` and `setup.sh` initialize the child repositories for you, so you do not need to run `git clone --recurse-submodules`.
-
-## What Gets Cloned
-
-`oceans777/skills` is the entry repository. It references these child repositories as Git submodules:
-
-```text
-repos/oceans-skills      -> oceans777/oceans-skills
-repos/community-skills   -> oceans777/community-skills
-```
-
-After setup finishes, all three repositories are available locally:
-
-```text
-skills/
-  repos/
-    oceans-skills/
-    community-skills/
-```
-
-`git clone --recurse-submodules` means "clone the main repository and its child repositories at the same time." It is valid Git, but it is not required here because setup runs the submodule initialization step.
-
-## Daily Commands
-
-### Windows
+更新托管技能时，在入口仓库目录先同步，再安装：
 
 ```powershell
 .\oceans.ps1 sync
 .\oceans.ps1 install
-.\oceans.ps1 validate
-.\oceans.ps1 test
-.\oceans.ps1 status
-.\oceans.ps1 import
 ```
-
-### Ubuntu and macOS
 
 ```sh
 ./oceans sync
 ./oceans install
-./oceans validate
-./oceans test
-./oceans status
-./oceans import
 ```
 
-Normal users only need setup plus these daily commands. `import` is a report for reviewing local skills; `stage` and `publish` are maintainer-only commands for publishing open-source skills.
+其中 `sync`（同步）更新入口和固定的子仓库版本，并核对生命周期；`install`（安装）校验并更新已启用的托管技能。这里的默认命令针对默认用户级目录；曾经指定其他工具或自定义目录的，应继续沿用相同目标，不要把默认命令当成所有项目都已更新。
 
-## What The Commands Do
+脚本报错、权限受限或网络不可达时，保留错误并排查，不强制覆盖文件或绕过组织的安全策略。手工安装及更多参数见[命令说明](docs/commands.md)。
 
-`setup.ps1` and `setup.sh` are for first-time setup. They initialize the child repositories under `repos/`, validate the repository layout, install skills, and print the next commands.
+</details>
 
-`oceans.ps1 sync` and `./oceans sync` pull the entry repository and update child repositories to the versions pinned by this repository.
+| 文档 | 内容 |
+| --- | --- |
+| [安装、命令与发布](docs/commands.md) | 手工操作、不同工具、导入和维护者发布流程。 |
+| [技能状态与审核](docs/skill-lifecycle.md) | 启用、候选审核、归档、阻止使用和内容完整性校验。 |
+| [同步与冲突策略](docs/skill-sync-policy.md) | 托管更新和本地内容保护。 |
+| [仓库结构](docs/repository-model.md) | 入口、自有技能和社区技能的职责划分。 |
 
-`oceans.ps1 install` and `./oceans install` validate all source skills before changing any runtime directory, then install them into your local Codex skills directory by default. You can target another runtime with `-Runtime` / `--runtime`, or install to every existing known runtime with `-AllExistingRuntimes` / `--all-existing-runtimes`. Local unmanaged skills always win: a repository skill will not overwrite an existing local skill unless that local skill has an oceans777 source marker. Managed updates are prepared in a sibling directory and activated by rename, with rollback of the previous version if activation fails.
-
-`oceans.ps1 validate` and `./oceans validate` check repository structure, required skill files, required `SKILL.md` frontmatter, third-party attribution files, cross-repository skill name uniqueness, symlinks, strict UTF-8 text, oversized or binary files, secret-like content, and machine-local paths.
-
-`oceans.ps1 test` and `./oceans test` run the platform-specific behavioral test suite. GitHub Actions runs the Shell suite on Ubuntu and macOS and the PowerShell suite on Windows.
-
-`oceans.ps1 status` and `./oceans status` show Git status, submodule status, known runtime skill roots, and managed oceans777 skill counts. Use `-Runtime` / `--runtime` to inspect one runtime, or `-AllExistingRuntimes` / `--all-existing-runtimes` to show only roots that already exist.
-
-`oceans.ps1 import` and `./oceans import` scan existing local skill roots for Codex, agents, Claude, OpenClaw, and Hermes, then print a review report for deciding what can be moved into oceans777 repositories. Runtime environment variables are honored first, and OpenClaw/Hermes also follow `XDG_CONFIG_HOME` when present. The import command is report-only: it does not copy files, delete files, commit, or push.
-
-## Maintainer Skill Publishing
-
-This flow is for maintainers publishing open-source skills into the oceans777 first-party or community repositories. Normal users do not need `stage` or `publish`.
-
-Review local skills first:
-
-Windows:
-
-```powershell
-.\oceans.ps1 import
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans import
-```
-
-Stage exactly one reviewed skill into a target repository:
-
-Windows:
-
-```powershell
-.\oceans.ps1 stage -SourceRoot "$HOME/.codex/skills" -Skill frontend-design -Target oceans
-.\oceans.ps1 stage -Runtime agents -Skill discuz-x5 -Target oceans
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans stage --source-root "$HOME/.codex/skills" --skill frontend-design --target oceans
-./oceans stage --runtime agents --skill discuz-x5 --target oceans
-```
-
-Publish after validation and review:
-
-Windows:
-
-```powershell
-.\oceans.ps1 publish
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans publish
-```
-
-`stage` copies one explicitly named local skill into either the first-party or community repository after safety checks. `publish` validates staged skill changes, commits child repository updates when needed, updates submodule pins, and pushes normal `main` branches.
-
-Publishing safety defaults:
-
-```text
-stage requires an explicit single skill name
-stage validates SKILL.md name, description, and folder-name consistency
-stage does not overwrite an existing repository skill unless replace-existing is requested
-stage blocks risky content unless allow-risk is requested for local review; publish validation still rejects unsafe repository content
-stage rejects symlinks and reparse points instead of dereferencing them
-stage prepares a complete sibling directory and atomically replaces an existing skill only after copying succeeds
-community skills require non-empty upstream, patch, and license records before publishing
-publish only pushes allowed skill changes and entry submodule pointer changes
-publish never force-pushes
-```
-
-## Repository Layout
-
-```text
-skills/
-  setup.ps1
-  setup.sh
-  oceans.ps1
-  oceans
-  manifest.yaml
-  repos/
-    oceans-skills/
-    community-skills/
-  scripts/
-    directory-transaction.ps1
-    directory-transaction.sh
-    install-skills.ps1
-    install-skills.sh
-    sync.ps1
-    sync.sh
-    validate-skills.ps1
-    validate-skills.sh
-    status.ps1
-    status.sh
-    import-skills.ps1
-    import-skills.sh
-    stage-skill.ps1
-    stage-skill.sh
-    publish-skills.ps1
-    publish-skills.sh
-  docs/
-```
-
-## Related Repositories
-
-`oceans777/oceans-skills` stores skills created or primarily maintained by oceans777.
-
-`oceans777/community-skills` stores third-party skills that oceans777 mirrors, adapts, or repackages with attribution.
-
-Skill folder names must be unique across both repositories. The local install directory is flat, so `repos/oceans-skills/skills/example/` and `repos/community-skills/skills/example/` would collide during installation. `validate` rejects cross-repository duplicates before they can be published.
-
-## Runtime Skill Roots
-
-The root registry recognizes these local runtime skill directories:
-
-```text
-codex    -> CODEX_HOME/skills or $HOME/.codex/skills
-agents   -> AGENTS_HOME/skills or $HOME/.agents/skills
-claude   -> CLAUDE_HOME/skills or $HOME/.claude/skills
-openclaw -> OPENCLAW_HOME/skills or $HOME/.openclaw/skills or $HOME/.config/openclaw/skills
-hermes   -> HERMES_HOME/skills or $HOME/.hermes/skills or $HOME/.config/hermes/skills
-```
-
-Default setup and install are conservative: they install into Codex only.
-
-Install into a specific runtime:
-
-Windows:
-
-```powershell
-.\oceans.ps1 install -Runtime claude
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans install --runtime claude
-```
-
-Install into every runtime root that already exists:
-
-Windows:
-
-```powershell
-.\oceans.ps1 install -AllExistingRuntimes
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans install --all-existing-runtimes
-```
-
-The installer does not delete local private skills and does not create missing non-Codex runtime directories unless you explicitly target that runtime.
-
-Inspect runtime skill roots without installing:
-
-Windows:
-
-```powershell
-.\oceans.ps1 status
-.\oceans.ps1 status -Runtime claude
-.\oceans.ps1 status -AllExistingRuntimes
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans status
-./oceans status --runtime claude
-./oceans status --all-existing-runtimes
-```
-
-## Local-First Duplicate Policy
-
-Local skills always win over repository skills with the same folder name.
-
-```text
-Local skill has no .oceans-skill-source marker
-  -> duplicate-local-wins; keep the local skill and skip the repository copy
-
-Local skill has .oceans-skill-source from the same oceans777 repository
-  -> managed by oceans777; update from that repository
-
-Local skill has .oceans-skill-source from a different oceans777 repository
-  -> duplicate-managed-source-mismatch; keep the local skill and ask for manual review
-
-Local skill has .oceans-skill-source from an unknown source
-  -> duplicate-unknown-marker; keep the local skill and ask for manual review
-```
-
-This protects private or manually installed skills from being overwritten by `setup` or `install`.
-
-## Review Local Skills For Import
-
-Use this before moving local skills into GitHub:
-
-Windows:
-
-```powershell
-.\oceans.ps1 import
-.\oceans.ps1 import -Runtime claude
-.\oceans.ps1 import -Format json
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans import
-./oceans import --runtime claude
-./oceans import --format json
-```
-
-To scan a different skills directory:
-
-Windows:
-
-```powershell
-.\oceans.ps1 import -SourceRoot "C:\path\to\skills"
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans import --source-root "$HOME/.codex/skills"
-```
-
-The report classifies local skills as:
-
-```text
-skip-system         -> do not publish Codex system skills
-missing-skill-md    -> repair before import
-invalid-skill-name  -> rename the local skill folder before import
-invalid-skill-metadata -> repair SKILL.md frontmatter before import
-already-managed     -> already has an oceans777 source marker
-duplicate-local-wins -> local skill matches a repository skill, but the local copy wins
-duplicate-local-runtime -> the same local skill name exists in more than one runtime root
-review-source       -> choose oceans-skills, community-skills, or do not publish
-```
-
-When a local skill name already exists in the repository, the report includes:
-
-```text
-repository_match: oceans-skills or community-skills
-local_runtime_match: codex, agents, claude, openclaw, or hermes
-action: keep local skill; repository version will not overwrite it
-```
-
-For `review-source` items, use this rule:
-
-```text
-Created by oceans777        -> repos/oceans-skills/skills/<skill-name>/
-Forked or adapted from other authors -> repos/community-skills/skills/<skill-name>/
-Private or source unclear   -> do not publish yet
-```
-
-The report also flags missing metadata, missing referenced license files, secret-like text, local absolute paths, large files, and binary or unreadable files so you can review them before publishing. Use JSON output when another script or UI needs to consume the report programmatically. On Shell platforms, filesystem names containing control characters or the internal record delimiter are rejected instead of producing ambiguous or invalid JSON.
-
-## Contribute Or Upload A Skill
-
-Uploading is intentionally split into three steps:
-
-```text
-import  -> scan local skills and produce a report; no files are changed
-stage   -> copy one reviewed local skill into oceans-skills or community-skills
-publish -> validate, commit, update submodule pins, and push to GitHub
-```
-
-Choose the target repository before staging:
-
-```text
-You created and maintain the skill       -> oceans-skills
-You forked or adapted another author     -> community-skills
-The skill is private or source is unclear -> do not upload yet
-```
-
-### Maintainers With Write Access
-
-Start with a scan:
-
-Windows:
-
-```powershell
-.\oceans.ps1 import
-.\oceans.ps1 import -Format json
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans import
-./oceans import --format json
-```
-
-Only stage skills that are clean enough to publish. A typical first-party upload looks like this:
-
-Windows:
-
-```powershell
-.\oceans.ps1 stage -Runtime codex -Skill my-skill -Target oceans
-.\oceans.ps1 validate
-.\oceans.ps1 publish
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans stage --runtime codex --skill my-skill --target oceans
-./oceans validate
-./oceans publish
-```
-
-If the skill is stored in a custom local directory, pass the source root explicitly:
-
-Windows:
-
-```powershell
-.\oceans.ps1 stage -SourceRoot "C:\path\to\skills" -Skill my-skill -Target oceans
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans stage --source-root "$HOME/path/to/skills" --skill my-skill --target oceans
-```
-
-For a community skill, include upstream and license records while staging:
-
-Windows:
-
-```powershell
-.\oceans.ps1 stage -Runtime codex -Skill third-party-skill -Target community `
-  -UpstreamUrl "https://github.com/author/repo" `
-  -UpstreamAuthor "Author Name" `
-  -UpstreamLicense "MIT" `
-  -LicenseFile "C:\path\to\LICENSE" `
-  -PatchSummary "Adapted metadata and packaging for oceans777."
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans stage --runtime codex --skill third-party-skill --target community \
-  --upstream-url "https://github.com/author/repo" \
-  --upstream-author "Author Name" \
-  --upstream-license "MIT" \
-  --license-file "$HOME/path/to/LICENSE" \
-  --patch-summary "Adapted metadata and packaging for oceans777."
-```
-
-Use `-AllowRisk` / `--allow-risk` only to place reviewed content in a local child-repository worktree for further repair; it is not a publication bypass, and `validate` / `publish` still reject unsafe content. Use `-ReplaceExisting` / `--replace-existing` only when intentionally replacing an existing repository skill. Replacement is transactional: the previous directory remains available for rollback until the new directory is fully prepared and activated.
-
-### Contributors Without Write Access
-
-External contributors cannot push directly to `oceans777/skills`, `oceans777/oceans-skills`, or `oceans777/community-skills`. Use this flow instead:
-
-```text
-1. Run import locally and fix any invalid-skill or risk findings.
-2. Fork the target child repository: oceans-skills for your own skill, or community-skills for a third-party skill.
-3. Add the skill under skills/<skill-name>/ in your fork.
-4. Run validate locally if you also cloned the entry repository.
-5. Open a pull request to the target child repository.
-6. After merge, oceans777 maintainers update the entry repository submodule pin.
-```
-
-For community contributions, include `UPSTREAM.md`, `PATCHES.md`, and `LICENSE` in the pull request.
-
-### Programmatic Preflight
-
-Use JSON output when another script or UI decides what can be uploaded:
-
-Windows:
-
-```powershell
-$report = .\oceans.ps1 import -Format json | ConvertFrom-Json
-$report.items |
-  Where-Object { $_.status -eq "review-source" } |
-  Select-Object name, runtime, source_path, risks
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans import --format json > import-report.json
-```
-
-A program should treat `review-source` as "needs human classification", not as automatic permission to upload. It should block or ask for repair on `invalid-skill-name`, `invalid-skill-metadata`, `missing-skill-md`, `duplicate-local-runtime`, and any non-empty risk list other than `risk: none detected`.
-
-The implementation lives in these scripts:
-
-```text
-scripts/import-skills.ps1 / scripts/import-skills.sh   -> scan and report
-scripts/stage-skill.ps1 / scripts/stage-skill.sh       -> copy one reviewed skill
-scripts/publish-skills.ps1 / scripts/publish-skills.sh -> commit, pin, and push
-scripts/skill-publish-rules.*                          -> shared metadata and risk rules
-scripts/directory-transaction.*                       -> staged directory activation, locking, recovery, and rollback
-```
-
-## Add A First-Party Skill
-
-Create a new folder in:
-
-```text
-repos/oceans-skills/skills/<skill-name>/
-```
-
-Each skill must include:
-
-```text
-SKILL.md
-```
-
-`SKILL.md` must start with frontmatter whose `name` equals the folder name and whose `description` is non-empty:
-
-```md
----
-name: <skill-name>
-description: <what this skill is for>
----
-```
-
-Skill names must use lowercase letters, digits, and hyphens.
-
-## Add A Community Skill
-
-Create a new folder in:
-
-```text
-repos/community-skills/skills/<safe-skill-name>/
-```
-
-Each community skill must include:
-
-```text
-SKILL.md
-UPSTREAM.md
-PATCHES.md
-LICENSE
-```
-
-The same `SKILL.md` frontmatter rule applies to community skills.
-
-Use `UPSTREAM.md` to record the original repository, author, license, import date, and local changes.
-
-## Troubleshooting
-
-If submodules are missing, run:
-
-Windows:
-
-```powershell
-git submodule update --init --recursive
-```
-
-Ubuntu and macOS:
-
-```sh
-git submodule update --init --recursive
-```
-
-If GitHub access fails while child repositories are being cloned, fix the network issue and rerun:
-
-Windows:
-
-```powershell
-.\setup.ps1
-```
-
-Ubuntu and macOS:
-
-```sh
-./setup.sh
-```
-
-For day-to-day updates after setup, rerun:
-
-Windows:
-
-```powershell
-.\oceans.ps1 sync
-```
-
-Ubuntu and macOS:
-
-```sh
-./oceans sync
-```
-
-If PowerShell blocks script execution, review your current policy:
-
-```powershell
-Get-ExecutionPolicy -List
-```
-
-For a normal personal Windows machine, this often fixes local script execution:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-If Ubuntu or macOS reports `Permission denied` for the shell entrypoints, restore executable permissions:
-
-```sh
-chmod +x setup.sh oceans scripts/*.sh
-```
-
-## 需求文档总纲技能
-
-`prd-blueprint`（需求文档生成技能）只在明确请求撰写或更新需求文档时生成三项总纲和完整文档。
-技能正文、总纲和完整需求在 [第一方仓库](https://github.com/oceans777/oceans-skills/tree/main/docs/prd-blueprint)。
-本入口通过目录记录和固定子仓库版本发布；新增该技能不恢复其他归档技能，也不创建定时任务或改写项目规则。
-Windows（视窗操作系统）的技能元数据读取明确采用 UTF-8（统一字符编码），不依赖旧命令行的系统编码。
+本仓库负责导航和统一管理；技能源码分别位于 [oceans-skills（自有技能仓库）](https://github.com/oceans777/oceans-skills) 与 [community-skills（社区技能仓库）](https://github.com/oceans777/community-skills)。无需为使用单个技能同时安装全部仓库。
