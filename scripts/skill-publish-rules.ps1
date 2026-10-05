@@ -39,7 +39,7 @@ function Get-OceansSkillFrontmatter {
     return [PSCustomObject]@{ HasFrontmatter = $false; Values = $Values; Issues = $Issues }
   }
 
-  $Lines = @(Get-Content -LiteralPath $SkillFile -ErrorAction SilentlyContinue)
+  $Lines = @(Get-Content -LiteralPath $SkillFile -Encoding UTF8 -ErrorAction SilentlyContinue)
   if ($Lines.Count -eq 0 -or $Lines[0].Trim() -ne "---") {
     return [PSCustomObject]@{ HasFrontmatter = $false; Values = $Values; Issues = $Issues }
   }

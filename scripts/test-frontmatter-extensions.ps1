@@ -104,6 +104,15 @@ mystery-runtime-field: true
 '@
   Assert-Contains ((Get-OceansSkillMetadataIssues -SkillPath $Unknown -ExpectedName "unsupported-extension") -join "`n") "risk: unsupported frontmatter key: mystery-runtime-field"
 
+  # UTF-8 without a BOM must not depend on the Windows ANSI code page.
+  # Build the fixture from code points so this test script remains ASCII.
+  $Utf8Description = -join ([char[]]@(0x9700, 0x6c42, 0x6587, 0x6863, 0x751f, 0x6210))
+  $Utf8Skill = Write-Skill "utf8-no-bom" ("---`nname: utf8-no-bom`ndescription: >-`n  $Utf8Description`n---`n")
+  Assert-Empty @(Get-OceansSkillMetadataIssues -SkillPath $Utf8Skill -ExpectedName "utf8-no-bom")
+  $Utf8Frontmatter = Get-OceansSkillFrontmatter -SkillPath $Utf8Skill
+  $ActualDescription = Get-OceansSkillFrontmatterValue -Frontmatter $Utf8Frontmatter -Key "description"
+  if ($ActualDescription -cne $Utf8Description) { throw "UTF-8 description was corrupted by the default code page." }
+
   Write-Host "PowerShell frontmatter extension test passed."
 } finally {
   Remove-TestRoot
