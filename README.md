@@ -592,3 +592,10 @@ If Ubuntu or macOS reports `Permission denied` for the shell entrypoints, restor
 ```sh
 chmod +x setup.sh oceans scripts/*.sh
 ```
+
+## 需求文档总纲技能
+
+`prd-blueprint`（需求文档生成技能）只在明确请求撰写或更新需求文档时生成三项总纲和完整文档。
+技能正文、总纲和完整需求在 [第一方仓库](https://github.com/oceans777/oceans-skills/tree/main/docs/prd-blueprint)。
+本入口通过目录记录和固定子仓库版本发布；新增该技能不恢复其他归档技能，也不创建定时任务或改写项目规则。
+Windows（视窗操作系统）的技能元数据读取明确采用 UTF-8（统一字符编码），不依赖旧命令行的系统编码。
