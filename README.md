@@ -6,23 +6,25 @@
 
 ## 可用技能
 
-### prd-blueprint（需求文档总纲技能）
+### prd-skill（需求文档总纲技能）
 
 当你明确要求编写或更新 PRD（产品需求文档）时，把当前可访问的讨论整理成“一句话目的＋功能清单＋验收标准”的独立总纲，再展开完整文档，并在对话中原样展示总纲。详细需求必须对应总纲，帮助发现遗漏、擅自扩展和验收缩水。
 
 **安装：复制整句话，发给你正在使用的编程助手。**
 
 ```text
-请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/prd-blueprint
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/prd-skill
 ```
 
 **使用示例：**
 
-> 使用 prd-blueprint（需求文档总纲技能），把我们刚才讨论的内容写成产品需求文档。
+> 使用 prd-skill（需求文档总纲技能），把我们刚才讨论的内容写成产品需求文档。
 
 普通讨论、仅提及需求文档或明确要求暂不写文档时，不应触发文档生成。这个技能不自动启动开发，也不创建半小时定时核查任务。
 
-[查看技能说明与完整文档](https://github.com/oceans777/prd-blueprint/tree/main/docs) · [查看发布状态](catalog/skills/prd-blueprint.skill)
+[查看技能说明与完整文档](https://github.com/oceans777/prd-skill/tree/main/docs) · [查看发布状态](catalog/skills/prd-skill.skill)
+
+`prd-blueprint` 已改名为 `prd-skill`。旧目录只保留弃用说明，托管安装不再安装它。GitHub 上的 `oceans777/prd-blueprint` 会跳转到新仓库。
 
 ### fork-skill（Fork 三轨同步技能）
 
@@ -127,7 +129,7 @@ cd skills
 | 技能 | 规范仓库 |
 | --- | --- |
 | fork-skill | https://github.com/oceans777/fork-skill |
-| prd-blueprint | https://github.com/oceans777/prd-blueprint |
+| prd-skill | https://github.com/oceans777/prd-skill |
 | agent-operating-system | https://github.com/oceans777/agent-operating-system |
 | audit-ai-generation-site | https://github.com/oceans777/audit-ai-generation-site |
 | discuz-x5 | https://github.com/oceans777/discuz-x5 |

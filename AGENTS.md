@@ -6,7 +6,7 @@ This repository is the entry point for the oceans777 skill system.
 
 - Keep this repository focused on synchronization, installation, validation, and documentation.
 - Do not place skill implementation folders directly in this repository.
-- Store the published first-party packages in `repos/oceans-skills/skills/`. Those directories are submodules of `oceans777/<skill-id>` except for the `git-upstream-sync-guard` stub.
+- Store the published first-party packages in `repos/oceans-skills/skills/`. Those directories are submodules of `oceans777/<skill-id>` except for the `git-upstream-sync-guard` and `prd-blueprint` stubs.
 - Pin the same canonical repositories directly at `repos/<skill-id>/` so the entry repository records the skill repo URL and commit.
 - Store community skills in `repos/community-skills/skills/`.
 - Do not rename `oceans-skills` to `skills`.

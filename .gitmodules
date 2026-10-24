@@ -22,6 +22,6 @@
 [submodule "repos/idea-ledger"]
 	path = repos/idea-ledger
 	url = https://github.com/oceans777/idea-ledger.git
-[submodule "repos/prd-blueprint"]
-	path = repos/prd-blueprint
-	url = https://github.com/oceans777/prd-blueprint.git
+[submodule "repos/prd-skill"]
+	path = repos/prd-skill
+	url = https://github.com/oceans777/prd-skill.git

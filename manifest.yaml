@@ -39,8 +39,8 @@ repositories:
     path: repos/idea-ledger
     url: https://github.com/oceans777/idea-ledger.git
     branch: main
-  - name: prd-blueprint
+  - name: prd-skill
     type: first-party
-    path: repos/prd-blueprint
-    url: https://github.com/oceans777/prd-blueprint.git
+    path: repos/prd-skill
+    url: https://github.com/oceans777/prd-skill.git
     branch: main
