@@ -15,15 +15,17 @@ assert_path_exists() { [ -e "$1" ] || { echo "Expected path to exist: $1" >&2; e
 assert_path_missing() { [ ! -e "$1" ] || { echo "Expected path to be absent: $1" >&2; exit 1; }; }
 assert_file_contains() { grep -F -q "$2" "$1" || { echo "Expected $1 to contain: $2" >&2; exit 1; }; }
 
-SKILL_NAME=git-upstream-sync-guard
+SKILL_NAME=fork-skill
 PUBLISHED_SKILL=$REPO_ROOT/repos/oceans-skills/skills/$SKILL_NAME
 CATALOG_RECORD=$REPO_ROOT/catalog/skills/$SKILL_NAME.skill
 CONTENT_SHA256=$(oceans_skill_content_sha256 "$PUBLISHED_SKILL")
 printf '%s-content-sha256=%s\n' "$SKILL_NAME" "$CONTENT_SHA256"
 assert_file_contains "$CATALOG_RECORD" "status=active"
 assert_file_contains "$CATALOG_RECORD" "content_sha256=$CONTENT_SHA256"
+assert_file_contains "$REPO_ROOT/catalog/skills/git-upstream-sync-guard.skill" "status=archived"
+assert_file_contains "$REPO_ROOT/catalog/skills/git-upstream-sync-guard.skill" "replacement=fork-skill"
 
-for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max; do
+for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max git-upstream-sync-guard; do
   assert_file_contains "$REPO_ROOT/catalog/skills/$archived.skill" "status=archived"
 done
 
@@ -53,10 +55,11 @@ verify_runtime() {
   assert_path_exists "$skill/references/operating-contract.md"
   assert_path_exists "$skill/scripts/init-upstream.sh"
   assert_path_exists "$skill/scripts/sync-upstream.sh"
-  assert_file_contains "$skill/SKILL.md" "name: git-upstream-sync-guard"
+  assert_file_contains "$skill/SKILL.md" "name: fork-skill"
+  assert_file_contains "$skill/SKILL.md" "upstream/main"
   assert_file_contains "$marker" "source_repository=oceans-skills"
   assert_file_contains "$marker" "runtime=$runtime"
-  for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max; do
+  for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max git-upstream-sync-guard; do
     assert_path_missing "$root/$archived"
   done
 }
@@ -68,4 +71,4 @@ verify_runtime openclaw "$OPENCLAW_HOME/skills"
 verify_runtime hermes "$HERMES_HOME/skills"
 
 printf '%s\n' "$OUTPUT"
-printf '%s\n' "Published git-upstream-sync-guard install and archive verification passed."
+printf '%s\n' "Published fork-skill install and archive verification passed."

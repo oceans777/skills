@@ -27,15 +27,17 @@ function Remove-TestRoot {
 }
 
 try {
-  $SkillName = "git-upstream-sync-guard"
+  $SkillName = "fork-skill"
   $PublishedSkill = Join-Path $RepoRoot "repos\oceans-skills\skills\$SkillName"
   $CatalogRecord = Join-Path $RepoRoot "catalog\skills\$SkillName.skill"
   $ContentSha256 = Get-OceansSkillContentSha256 -SkillPath $PublishedSkill
   Write-Host "$SkillName-content-sha256=$ContentSha256"
   Assert-FileContains $CatalogRecord "status=active"
   Assert-FileContains $CatalogRecord "content_sha256=$ContentSha256"
+  Assert-FileContains (Join-Path $RepoRoot "catalog\skills\git-upstream-sync-guard.skill") "status=archived"
+  Assert-FileContains (Join-Path $RepoRoot "catalog\skills\git-upstream-sync-guard.skill") "replacement=fork-skill"
 
-  foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max")) {
+  foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max","git-upstream-sync-guard")) {
     Assert-FileContains (Join-Path $RepoRoot "catalog\skills\$Archived.skill") "status=archived"
   }
 
@@ -73,16 +75,17 @@ try {
     Assert-PathExists (Join-Path $Skill "references\operating-contract.md")
     Assert-PathExists (Join-Path $Skill "scripts\init-upstream.ps1")
     Assert-PathExists (Join-Path $Skill "scripts\sync-upstream.ps1")
-    Assert-FileContains (Join-Path $Skill "SKILL.md") "name: git-upstream-sync-guard"
+    Assert-FileContains (Join-Path $Skill "SKILL.md") "name: fork-skill"
+    Assert-FileContains (Join-Path $Skill "SKILL.md") "upstream/main"
     Assert-FileContains $Marker "source_repository=oceans-skills"
     Assert-FileContains $Marker "runtime=$($Target.Runtime)"
-    foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max")) {
+    foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max","git-upstream-sync-guard")) {
       Assert-PathMissing (Join-Path $Target.Root $Archived)
     }
   }
 
   Write-Host $InstallText
-  Write-Host "Published git-upstream-sync-guard install and archive verification passed."
+  Write-Host "Published fork-skill install and archive verification passed."
 } finally {
   Remove-TestRoot
 }

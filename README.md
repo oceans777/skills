@@ -13,7 +13,7 @@
 **安装：复制整句话，发给你正在使用的编程助手。**
 
 ```text
-请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/oceans-skills/tree/main/skills/prd-blueprint
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/prd-blueprint
 ```
 
 **使用示例：**
@@ -22,23 +22,25 @@
 
 普通讨论、仅提及需求文档或明确要求暂不写文档时，不应触发文档生成。这个技能不自动启动开发，也不创建半小时定时核查任务。
 
-[查看技能说明与完整文档](https://github.com/oceans777/oceans-skills/tree/main/docs/prd-blueprint) · [查看发布状态](catalog/skills/prd-blueprint.skill)
+[查看技能说明与完整文档](https://github.com/oceans777/prd-blueprint/tree/main/docs) · [查看发布状态](catalog/skills/prd-blueprint.skill)
 
-### git-upstream-sync-guard（上游代码同步保护技能）
+### fork-skill（Fork 三轨同步技能）
 
-用于持续接收官方更新的二次开发项目：区分上游镜像和自己的定制代码，同步前做预检，验证通过后再进入后续分支。出现冲突、工作区不干净或分支异常时先停止核查，不用强制覆盖掩盖问题。
+用于持续接收官方更新的二次开发项目。新 Fork 使用三条分支：`upstream/main`（或 `upstream/` 加上游默认分支名）只做快进镜像，`dev` 做二开，`main` 接收已验证的发布结果。原先的生产分支名是 `release`。出现冲突、工作区不干净或镜像分支不纯时先停止核查，不用强制覆盖掩盖问题。
 
 **安装：复制整句话，发给你正在使用的编程助手。**
 
 ```text
-请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/oceans-skills/tree/main/skills/git-upstream-sync-guard
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/fork-skill
 ```
 
 **使用示例：**
 
-> 使用 git-upstream-sync-guard（上游代码同步保护技能），先检查当前项目的上游同步方案，暂时不要合并代码。
+> 使用 fork-skill（Fork 三轨同步技能），先检查当前项目的上游同步方案，暂时不要合并代码。
 
-[查看技能说明](https://github.com/oceans777/oceans-skills/blob/main/skills/git-upstream-sync-guard/SKILL.md) · [查看发布状态](catalog/skills/git-upstream-sync-guard.skill)
+[查看技能说明](https://github.com/oceans777/fork-skill/blob/main/SKILL.md) · [查看发布状态](catalog/skills/fork-skill.skill)
+
+`git-upstream-sync-guard` 已改名为 `fork-skill`。旧目录只保留弃用说明，托管安装不再安装它。
 
 ## 安装后怎么用
 
@@ -120,4 +122,16 @@ cd skills
 | [同步与冲突策略](docs/skill-sync-policy.md) | 托管更新和本地内容保护。 |
 | [仓库结构](docs/repository-model.md) | 入口、自有技能和社区技能的职责划分。 |
 
-本仓库负责导航和统一管理；技能源码分别位于 [oceans-skills（自有技能仓库）](https://github.com/oceans777/oceans-skills) 与 [community-skills（社区技能仓库）](https://github.com/oceans777/community-skills)。无需为使用单个技能同时安装全部仓库。
+本仓库负责导航和统一管理。自有技能的规范副本在独立仓库 `https://github.com/oceans777/<skill-id>`，社区技能仍在 [community-skills](https://github.com/oceans777/community-skills)。[oceans-skills](https://github.com/oceans777/oceans-skills) 保留为兼容聚合，用子模块指向这些规范副本。无需为使用单个技能同时安装全部仓库。
+
+| 技能 | 规范仓库 |
+| --- | --- |
+| fork-skill | https://github.com/oceans777/fork-skill |
+| prd-blueprint | https://github.com/oceans777/prd-blueprint |
+| agent-operating-system | https://github.com/oceans777/agent-operating-system |
+| audit-ai-generation-site | https://github.com/oceans777/audit-ai-generation-site |
+| discuz-x5 | https://github.com/oceans777/discuz-x5 |
+| experience-triage | https://github.com/oceans777/experience-triage |
+| idea-ledger | https://github.com/oceans777/idea-ledger |
+
+托管安装仍只启用目录里状态为 active 的技能。上表里的其余技能可以按一句话安装自己的仓库；是否进入默认批量安装以 [技能目录](catalog/skills) 为准。

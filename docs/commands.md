@@ -28,7 +28,7 @@ cd skills
 
 These are the recommended flows. Do not require users to type `--recurse-submodules`; setup initializes the child repositories after the main repository is cloned.
 
-`setup.ps1` and `setup.sh` initialize `repos/oceans-skills` and `repos/community-skills`, validate structure, install skills, and print next steps.
+`setup.ps1` and `setup.sh` initialize every child repository in `.gitmodules`, including `repos/oceans-skills`, `repos/community-skills`, and `repos/<skill-id>`, validate structure, install skills, and print next steps. One-line installs in the README use `https://github.com/oceans777/<skill-id>` and do not require this setup.
 
 ## About `--recurse-submodules`
 
