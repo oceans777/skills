@@ -24,8 +24,11 @@ assert_file_contains "$CATALOG_RECORD" "status=active"
 assert_file_contains "$CATALOG_RECORD" "content_sha256=$CONTENT_SHA256"
 assert_file_contains "$REPO_ROOT/catalog/skills/git-upstream-sync-guard.skill" "status=archived"
 assert_file_contains "$REPO_ROOT/catalog/skills/git-upstream-sync-guard.skill" "replacement=fork-skill"
+assert_file_contains "$REPO_ROOT/catalog/skills/prd-skill.skill" "status=active"
+assert_file_contains "$REPO_ROOT/catalog/skills/prd-blueprint.skill" "status=archived"
+assert_file_contains "$REPO_ROOT/catalog/skills/prd-blueprint.skill" "replacement=prd-skill"
 
-for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max git-upstream-sync-guard; do
+for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max git-upstream-sync-guard prd-blueprint; do
   assert_file_contains "$REPO_ROOT/catalog/skills/$archived.skill" "status=archived"
 done
 
@@ -44,6 +47,7 @@ done
 
 OUTPUT=$(sh "$REPO_ROOT/scripts/install-skills.sh" --all-existing-runtimes 2>&1)
 assert_contains "$OUTPUT" "Installed skill: $SKILL_NAME"
+assert_contains "$OUTPUT" "Installed skill: prd-skill"
 
 verify_runtime() {
   runtime=$1
@@ -59,7 +63,9 @@ verify_runtime() {
   assert_file_contains "$skill/SKILL.md" "upstream/main"
   assert_file_contains "$marker" "source_repository=oceans-skills"
   assert_file_contains "$marker" "runtime=$runtime"
-  for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max git-upstream-sync-guard; do
+  assert_path_exists "$root/prd-skill/SKILL.md"
+  assert_file_contains "$root/prd-skill/SKILL.md" "name: prd-skill"
+  for archived in agent-operating-system discuz-x5 experience-triage idea-ledger ui-ux-pro-max git-upstream-sync-guard prd-blueprint; do
     assert_path_missing "$root/$archived"
   done
 }

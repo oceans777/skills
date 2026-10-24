@@ -13,7 +13,7 @@ Users clone only `oceans777/skills`. The entry repository uses Git submodules un
 
 - `repos/community-skills` is the third-party skill repository, with upstream attribution and license records.
 - `repos/oceans-skills` is the first-party compatibility aggregate. Managed install reads published packages from `repos/oceans-skills/skills/<skill-id>` because catalog records still use `package_repository=oceans-skills` or `package_repository=community-skills`.
-- `repos/<skill-id>` pins the canonical skill repository, for example `repos/fork-skill` → `https://github.com/oceans777/fork-skill`. Inside the aggregate, `skills/<skill-id>` is usually a submodule of that same repository. `skills/git-upstream-sync-guard` is only a deprecation stub.
+- `repos/<skill-id>` pins the canonical skill repository, for example `repos/prd-skill` → `https://github.com/oceans777/prd-skill`. Inside the aggregate, `skills/<skill-id>` is usually a submodule of that same repository. `skills/git-upstream-sync-guard` and `skills/prd-blueprint` are only deprecation stubs.
 
 Git submodules are pointers from one repository to another repository at a specific commit. The entry repository controls which commits are installed together.
 

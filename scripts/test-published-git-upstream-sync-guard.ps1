@@ -36,8 +36,11 @@ try {
   Assert-FileContains $CatalogRecord "content_sha256=$ContentSha256"
   Assert-FileContains (Join-Path $RepoRoot "catalog\skills\git-upstream-sync-guard.skill") "status=archived"
   Assert-FileContains (Join-Path $RepoRoot "catalog\skills\git-upstream-sync-guard.skill") "replacement=fork-skill"
+  Assert-FileContains (Join-Path $RepoRoot "catalog\skills\prd-skill.skill") "status=active"
+  Assert-FileContains (Join-Path $RepoRoot "catalog\skills\prd-blueprint.skill") "status=archived"
+  Assert-FileContains (Join-Path $RepoRoot "catalog\skills\prd-blueprint.skill") "replacement=prd-skill"
 
-  foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max","git-upstream-sync-guard")) {
+  foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max","git-upstream-sync-guard","prd-blueprint")) {
     Assert-FileContains (Join-Path $RepoRoot "catalog\skills\$Archived.skill") "status=archived"
   }
 
@@ -66,6 +69,9 @@ try {
   if (-not $InstallText.Contains("Installed skill: $SkillName")) {
     throw "Expected installer to install $SkillName"
   }
+  if (-not $InstallText.Contains("Installed skill: prd-skill")) {
+    throw "Expected installer to install prd-skill"
+  }
 
   foreach ($Target in $Targets) {
     $Skill = Join-Path $Target.Root $SkillName
@@ -79,7 +85,9 @@ try {
     Assert-FileContains (Join-Path $Skill "SKILL.md") "upstream/main"
     Assert-FileContains $Marker "source_repository=oceans-skills"
     Assert-FileContains $Marker "runtime=$($Target.Runtime)"
-    foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max","git-upstream-sync-guard")) {
+    Assert-PathExists (Join-Path $Target.Root "prd-skill\SKILL.md")
+    Assert-FileContains (Join-Path $Target.Root "prd-skill\SKILL.md") "name: prd-skill"
+    foreach ($Archived in @("agent-operating-system","discuz-x5","experience-triage","idea-ledger","ui-ux-pro-max","git-upstream-sync-guard","prd-blueprint")) {
       Assert-PathMissing (Join-Path $Target.Root $Archived)
     }
   }
