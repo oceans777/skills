@@ -4,3 +4,24 @@
 [submodule "repos/community-skills"]
 	path = repos/community-skills
 	url = https://github.com/oceans777/community-skills.git
+[submodule "repos/fork-skill"]
+	path = repos/fork-skill
+	url = https://github.com/oceans777/fork-skill.git
+[submodule "repos/agent-operating-system"]
+	path = repos/agent-operating-system
+	url = https://github.com/oceans777/agent-operating-system.git
+[submodule "repos/audit-ai-generation-site"]
+	path = repos/audit-ai-generation-site
+	url = https://github.com/oceans777/audit-ai-generation-site.git
+[submodule "repos/discuz-x5"]
+	path = repos/discuz-x5
+	url = https://github.com/oceans777/discuz-x5.git
+[submodule "repos/experience-triage"]
+	path = repos/experience-triage
+	url = https://github.com/oceans777/experience-triage.git
+[submodule "repos/idea-ledger"]
+	path = repos/idea-ledger
+	url = https://github.com/oceans777/idea-ledger.git
+[submodule "repos/prd-blueprint"]
+	path = repos/prd-blueprint
+	url = https://github.com/oceans777/prd-blueprint.git

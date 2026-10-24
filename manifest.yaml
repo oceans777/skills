@@ -9,3 +9,38 @@ repositories:
     path: repos/community-skills
     url: https://github.com/oceans777/community-skills.git
     branch: main
+  - name: fork-skill
+    type: first-party
+    path: repos/fork-skill
+    url: https://github.com/oceans777/fork-skill.git
+    branch: main
+  - name: agent-operating-system
+    type: first-party
+    path: repos/agent-operating-system
+    url: https://github.com/oceans777/agent-operating-system.git
+    branch: main
+  - name: audit-ai-generation-site
+    type: first-party
+    path: repos/audit-ai-generation-site
+    url: https://github.com/oceans777/audit-ai-generation-site.git
+    branch: main
+  - name: discuz-x5
+    type: first-party
+    path: repos/discuz-x5
+    url: https://github.com/oceans777/discuz-x5.git
+    branch: main
+  - name: experience-triage
+    type: first-party
+    path: repos/experience-triage
+    url: https://github.com/oceans777/experience-triage.git
+    branch: main
+  - name: idea-ledger
+    type: first-party
+    path: repos/idea-ledger
+    url: https://github.com/oceans777/idea-ledger.git
+    branch: main
+  - name: prd-blueprint
+    type: first-party
+    path: repos/prd-blueprint
+    url: https://github.com/oceans777/prd-blueprint.git
+    branch: main
