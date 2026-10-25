@@ -124,7 +124,7 @@ cd skills
 | [同步与冲突策略](docs/skill-sync-policy.md) | 托管更新和本地内容保护。 |
 | [仓库结构](docs/repository-model.md) | 入口、自有技能和社区技能的职责划分。 |
 
-本仓库负责导航和统一管理。自有技能的规范副本在独立仓库 `https://github.com/oceans777/<skill-id>`，社区技能仍在 [community-skills](https://github.com/oceans777/community-skills)。[oceans-skills](https://github.com/oceans777/oceans-skills) 保留为兼容聚合，用子模块指向这些规范副本。无需为使用单个技能同时安装全部仓库。
+本仓库负责导航和统一管理。自有技能只存在于独立仓库 `https://github.com/oceans777/<skill-id>`，托管安装直接使用这些仓库。社区技能仍在 [community-skills](https://github.com/oceans777/community-skills)。`oceans777/oceans-skills` 已退出安装和目录依赖，仓库归档后只读保留历史。无需为使用单个技能同时安装全部仓库。
 
 | 技能 | 规范仓库 |
 | --- | --- |

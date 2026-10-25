@@ -123,15 +123,128 @@ function Prepare-ChildCommit {
   }
 }
 
+function Get-PublishDiscoveredSkillNames {
+  $Gitmodules = Join-Path $RepoRoot ".gitmodules"
+  if (-not (Test-Path -LiteralPath $Gitmodules -PathType Leaf)) { throw "publish-missing-gitmodules" }
+  $Output = & git -C $RepoRoot config -f $Gitmodules --get-regexp '^submodule\..*\.path$'
+  if ($LASTEXITCODE -ne 0) { throw "publish-missing-gitmodules" }
+  $Names = New-Object System.Collections.Generic.List[string]
+  foreach ($Line in @($Output)) {
+    $Text = [string]$Line
+    if ([string]::IsNullOrWhiteSpace($Text)) { continue }
+    $Space = $Text.LastIndexOf(' ')
+    if ($Space -lt 1) { continue }
+    $Path = $Text.Substring($Space + 1).Trim()
+    if ($Path -in @("repos/community-skills", "repos/oceans-skills")) { continue }
+    if ($Path.StartsWith("repos/") -and -not $Path.Substring(6).Contains("/")) { $Names.Add($Path.Substring(6)) }
+  }
+  return @($Names)
+}
+
+function Publish-DiscoveredSkillRepos {
+  $Names = @(Get-PublishDiscoveredSkillNames)
+  Assert-OnMain -Repo $RepoRoot -Name "entry"
+  Assert-OriginRemote -Repo $RepoRoot -Name "entry"
+  Update-OriginMain -Repo $RepoRoot -Name "entry"
+  Assert-NotBehindOriginMain -Repo $RepoRoot -Name "entry"
+  Assert-OnMain -Repo $CommunityRepo -Name "community-skills"
+  Assert-OriginRemote -Repo $CommunityRepo -Name "community-skills"
+  Update-OriginMain -Repo $CommunityRepo -Name "community-skills"
+  Assert-NotBehindOriginMain -Repo $CommunityRepo -Name "community-skills"
+  foreach ($Name in $Names) {
+    $Repo = Join-Path $RepoRoot (Join-Path "repos" $Name)
+    Assert-OnMain -Repo $Repo -Name $Name
+    Assert-OriginRemote -Repo $Repo -Name $Name
+    Update-OriginMain -Repo $Repo -Name $Name
+    Assert-NotBehindOriginMain -Repo $Repo -Name $Name
+  }
+  $Allowed = @("catalog", $CommunityRel)
+  foreach ($Name in $Names) { $Allowed += "repos/$Name" }
+  Assert-RepoCleanOutsidePaths -Repo $RepoRoot -Name "entry" -AllowedRoots $Allowed
+  Assert-RepoCleanOutsidePaths -Repo $CommunityRepo -Name "community-skills" -AllowedRoots @("skills")
+  Assert-AheadChangesInsidePaths -Repo $RepoRoot -Name "entry" -AllowedRoots $Allowed
+  Assert-AheadChangesInsidePaths -Repo $CommunityRepo -Name "community-skills" -AllowedRoots @("skills")
+  $ValidationArguments = @{
+    FirstPartySkillsRoot = (Join-Path $RepoRoot "repos")
+    CommunitySkillsRoot = (Join-Path $CommunityRepo "skills")
+    CatalogRoot = $CatalogRoot
+  }
+  & (Join-Path $ScriptRoot "validate-skills.ps1") @ValidationArguments
+  $SkillChanged = $false
+  $EntrySkillChanged = $false
+  foreach ($Name in $Names) {
+    $Repo = Join-Path $RepoRoot (Join-Path "repos" $Name)
+    if ((Test-RepoHasChangesUnderPath -Repo $Repo -Path ".") -or (Test-RepoAhead -Repo $Repo)) { $SkillChanged = $true }
+    if (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path "repos/$Name") { $EntrySkillChanged = $true }
+  }
+  $CommunityChanged = Test-RepoHasChangesUnderPath -Repo $CommunityRepo -Path "skills"
+  $EntryChanged = $EntrySkillChanged -or (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path $CommunityRel) -or (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path $CatalogPath)
+  $CommunityAhead = Test-RepoAhead -Repo $CommunityRepo
+  $EntryAhead = Test-RepoAhead -Repo $RepoRoot
+  if (-not $SkillChanged -and -not $CommunityChanged -and -not $EntryChanged -and -not $CommunityAhead -and -not $EntryAhead) {
+    Write-Host "publish-no-changes"
+    exit 0
+  }
+  if ($DryRun) {
+    foreach ($Name in $Names) {
+      $Repo = Join-Path $RepoRoot (Join-Path "repos" $Name)
+      if (Test-RepoHasChangesUnderPath -Repo $Repo -Path ".") { Write-Host "plan-commit-child: $Name" }
+      if ((Test-RepoHasChangesUnderPath -Repo $Repo -Path ".") -or (Test-RepoAhead -Repo $Repo)) { Write-Host "plan-push-child: $Name" }
+    }
+    if ($CommunityChanged) { Write-Host "plan-commit-child: community-skills" }
+    if ($CommunityChanged -or $CommunityAhead) { Write-Host "plan-push-child: community-skills" }
+    Write-Host "plan-commit-entry: release: publish skills and catalog"
+    Write-Host "plan-push-entry-last: entry"
+    exit 0
+  }
+  foreach ($Name in $Names) {
+    $Repo = Join-Path $RepoRoot (Join-Path "repos" $Name)
+    if (Test-RepoHasChangesUnderPath -Repo $Repo -Path ".") {
+      Invoke-Git -Description "stage $Name" -Arguments @("-C", $Repo, "add", "-A")
+      if (Test-StagedChangesUnderPath -Repo $Repo -Path ".") {
+        Invoke-Git -Description "commit $Name" -Arguments @("-C", $Repo, "commit", "-m", "skills: publish $Name")
+      }
+    }
+  }
+  Prepare-ChildCommit -Repo $CommunityRepo -Name "community-skills" -Message "skills: publish staged community skills"
+  & (Join-Path $ScriptRoot "validate-skills.ps1") @ValidationArguments
+  Invoke-Git -Description "stage entry catalog" -Arguments @("-C", $RepoRoot, "add", "catalog", $CommunityRel)
+  foreach ($Name in $Names) {
+    Invoke-Git -Description "stage entry pin $Name" -Arguments @("-C", $RepoRoot, "add", "repos/$Name")
+  }
+  $EntryNeedsCommit = (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path "catalog") -or (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path $CommunityRel)
+  foreach ($Name in $Names) {
+    if (Test-RepoHasChangesUnderPath -Repo $RepoRoot -Path "repos/$Name") { $EntryNeedsCommit = $true }
+  }
+  if ($EntryNeedsCommit) {
+    Invoke-Git -Description "commit entry release state" -Arguments @("-C", $RepoRoot, "commit", "-m", "release: publish skills and catalog")
+  }
+  foreach ($Name in $Names) {
+    $Repo = Join-Path $RepoRoot (Join-Path "repos" $Name)
+    if (Test-RepoAhead -Repo $Repo) {
+      Invoke-GitWithRetry -Description "push $Name main" -Arguments @("-C", $Repo, "push", "--quiet", "origin", "main") -DelaySeconds 1
+    }
+  }
+  if (Test-RepoAhead -Repo $CommunityRepo) {
+    Invoke-GitWithRetry -Description "push community-skills main" -Arguments @("-C", $CommunityRepo, "push", "--quiet", "origin", "main") -DelaySeconds 1
+  }
+  if (Test-RepoAhead -Repo $RepoRoot) {
+    Invoke-GitWithRetry -Description "push entry main last" -Arguments @("-C", $RepoRoot, "push", "--quiet", "origin", "main") -DelaySeconds 1
+  }
+}
+
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $ScriptRoot }
 $RepoRoot = Resolve-AbsolutePath -Path $RepoRoot
-if (-not $FirstPartyRepoPath) { $FirstPartyRepoPath = "repos/oceans-skills" }
 if (-not $CommunityRepoPath) { $CommunityRepoPath = "repos/community-skills" }
-$FirstPartyRepo = Resolve-RepoPath -Root $RepoRoot -Path $FirstPartyRepoPath
 $CommunityRepo = Resolve-RepoPath -Root $RepoRoot -Path $CommunityRepoPath
-$FirstPartyRel = Get-RelativeGitPath -Root $RepoRoot -Path $FirstPartyRepo
 $CommunityRel = Get-RelativeGitPath -Root $RepoRoot -Path $CommunityRepo
 $CatalogRoot = Join-Path $RepoRoot $CatalogPath
+if (-not $PSBoundParameters.ContainsKey("FirstPartyRepoPath") -or [string]::IsNullOrWhiteSpace($FirstPartyRepoPath)) {
+  Publish-DiscoveredSkillRepos
+  exit 0
+}
+$FirstPartyRepo = Resolve-RepoPath -Root $RepoRoot -Path $FirstPartyRepoPath
+$FirstPartyRel = Get-RelativeGitPath -Root $RepoRoot -Path $FirstPartyRepo
 
 $Repositories = @(
   [PSCustomObject]@{ Name = "entry"; Repo = $RepoRoot },

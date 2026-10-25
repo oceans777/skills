@@ -22,7 +22,7 @@ A published package, a review candidate, a lifecycle decision, and a runtime cop
 
 A lifecycle transition is not considered locally enforced merely because the catalog file changed. `archive` and `block` reconcile all known existing runtime roots before the command returns. `sync` also reconciles lifecycle state after updating the entry repository and child repositories.
 
-The reconciler only moves a directory when it has a valid `.oceans-skill-source` marker from `oceans-skills` or `community-skills`. An unmanaged local directory is never deleted or moved automatically. When an unmanaged directory has the same name as a blocked skill, reconciliation fails closed, prints its exact path, and requires the operator to remove or rename it manually. The catalog remains blocked even when local reconciliation reports this conflict.
+The reconciler only moves a directory when it has a valid `.oceans-skill-source` marker from a first-party skill repository, the legacy `oceans-skills` package name, or `community-skills`. An unmanaged local directory is never deleted or moved automatically. When an unmanaged directory has the same name as a blocked skill, reconciliation fails closed, prints its exact path, and requires the operator to remove or rename it manually. The catalog remains blocked even when local reconciliation reports this conflict.
 
 ## Runtime enforcement boundary
 

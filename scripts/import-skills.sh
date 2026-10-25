@@ -5,10 +5,11 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 . "$SCRIPT_DIR/skill-publish-rules.sh"
+. "$SCRIPT_DIR/skill-catalog.sh"
 
 SOURCE_ROOT=
 RUNTIME=
-FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+FIRST_PARTY_ROOT=$REPO_ROOT/repos
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 FORMAT=text
 
@@ -157,7 +158,11 @@ repository_match() {
   matches=
 
   if [ -d "$FIRST_PARTY_ROOT/$skill_name" ]; then
-    matches=oceans-skills
+    if oceans_catalog_hub_repos_layout "$FIRST_PARTY_ROOT"; then
+      matches=$skill_name
+    else
+      matches=oceans-skills
+    fi
   fi
 
   if [ -d "$COMMUNITY_ROOT/$skill_name" ]; then
@@ -252,18 +257,20 @@ item_status() {
   source_repository=$(managed_source "$skill_path" || true)
   case "$source_repository" in
     oceans-skills)
-      echo "already-managed|repos/oceans-skills/skills/$skill_name|managed by oceans777; install may update it|Local skill has an oceans777 first-party source marker."
+      echo "already-managed|repos/oceans-skills/skills/$skill_name|managed by oceans777; install may update it|Local skill has a legacy oceans-skills source marker. Reinstall from the skill repository."
       ;;
     community-skills)
       echo "already-managed|repos/community-skills/skills/$skill_name|managed by oceans777; install may update it|Local skill has an oceans777 community source marker."
       ;;
     *)
-      if [ "$duplicate_local_runtime" -eq 1 ]; then
+      if oceans_catalog_valid_skill_name "$source_repository"; then
+        echo "already-managed|repos/$source_repository|managed by oceans777; install may update it|Local skill has an oceans777 first-party source marker."
+      elif [ "$duplicate_local_runtime" -eq 1 ]; then
         echo "duplicate-local-runtime|choose one local runtime source before staging|stage with an explicit runtime or source root after review|The same local skill folder name exists in more than one runtime root."
       elif [ "$repository_match_value" != "none" ]; then
         echo "duplicate-local-wins|local skill stays installed|keep local skill; repository version will not overwrite it|A repository skill has the same name, but this local skill has no oceans777 source marker."
       else
-        echo "review-source|oceans-skills if you created it; community-skills if third-party; do not publish if private|review source before publishing|No oceans777 source marker found."
+        echo "review-source|the skill repository https://github.com/oceans777/<skill-id> if you created it; community-skills if third-party; do not publish if private|review source before publishing|No oceans777 source marker found."
       fi
       ;;
   esac

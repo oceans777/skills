@@ -21,6 +21,38 @@ oceans_remove_excluded_paths() {
        -name node_modules \) -exec rm -rf {} +
 }
 
+# Replace the files inside a skill repository without removing its .git link.
+oceans_replace_skill_preserving_git() {
+  staged=$1
+  target=$2
+  [ -d "$staged" ] && [ ! -L "$staged" ] || return 1
+  [ -d "$target" ] && [ ! -L "$target" ] || return 1
+  [ -e "$target/.git" ] && [ ! -L "$target/.git" ] || return 1
+  backup=$(mktemp -d "${TMPDIR:-/tmp}/oceans-git-preserve.XXXXXX") || return 1
+  restore_backup() {
+    find "$target" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+    if [ -n "$(find "$backup" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+      cp -R "$backup"/. "$target"/
+    fi
+  }
+  if ! (cd "$target" && find . -mindepth 1 -maxdepth 1 ! -name .git -exec cp -R {} "$backup"/ \;); then
+    rm -rf "$backup"
+    return 1
+  fi
+  if ! find "$target" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +; then
+    restore_backup || true
+    rm -rf "$backup"
+    return 1
+  fi
+  if ! cp -R "$staged"/. "$target"/; then
+    restore_backup || true
+    rm -rf "$backup"
+    return 1
+  fi
+  rm -rf "$backup" "$staged"
+  return 0
+}
+
 oceans_commit_staged_directory() (
   oceans_transaction_staged=$1
   oceans_transaction_target=$2

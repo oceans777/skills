@@ -27,7 +27,7 @@ $CatalogExplicit = $PSBoundParameters.ContainsKey("CatalogRoot")
 $InstallRoot = $RequestedInstallRoot
 $Runtime = $RequestedRuntime
 
-if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills" }
+if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos" }
 if (-not $CommunitySkillsRoot) { $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills" }
 if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
 if ($CustomSourceRoots -and -not $CatalogExplicit -and -not $WithoutCatalog) {
@@ -59,11 +59,6 @@ if (-not $LifecycleReconcile) {
   if (-not $TargetState) { throw "Invalid catalog state for lifecycle reconciliation: $TargetSkill" }
 }
 
-$Sources = @(
-  [PSCustomObject]@{ Repository = "oceans-skills"; Path = $FirstPartySkillsRoot },
-  [PSCustomObject]@{ Repository = "community-skills"; Path = $CommunitySkillsRoot }
-)
-
 if ($InstallRoot) {
   $InstallTargets = @(Get-OceansRuntimeRoot -Runtime "custom" -Path $InstallRoot -Operation "install" -Create)
 } elseif ($AllExistingRuntimes) {
@@ -88,8 +83,20 @@ function Get-MarkerValue {
 }
 
 function Test-KnownOceansSource {
-  param([string] $Repository)
-  return $Repository -in @("oceans-skills", "community-skills")
+  param([string] $Repository, [string] $SkillName = "")
+  if ($Repository -in @("oceans-skills", "community-skills")) { return $true }
+  if ($CatalogEnabled -and $SkillName -and (Test-OceansCatalogSkillName -Name $Repository)) {
+    $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $SkillName
+    if (-not (Test-Path -LiteralPath $RecordPath -PathType Leaf)) { return $false }
+    $Record = Get-OceansCatalogRecord -Path $RecordPath
+    return ([string]$Record["package_repository"] -ceq $Repository)
+  }
+  return $false
+}
+
+function Test-LegacyFirstPartySource {
+  param([string] $ExistingSource, [string] $RepositoryName)
+  return ($ExistingSource -eq "oceans-skills" -and $RepositoryName -ne "community-skills")
 }
 
 function Test-ManagedMarker {
@@ -102,7 +109,7 @@ function Test-ManagedMarker {
   $MarkerItem = Get-Item -LiteralPath $MarkerPath -Force
   if (($MarkerItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $false }
   $SourceRepository = Get-MarkerValue -MarkerPath $MarkerPath -Key "source_repository"
-  if (-not (Test-KnownOceansSource -Repository $SourceRepository)) { return $false }
+  if (-not (Test-KnownOceansSource -Repository $SourceRepository -SkillName $ExpectedSkill)) { return $false }
   $MarkerSkill = Get-MarkerValue -MarkerPath $MarkerPath -Key "skill_name"
   $MarkerRoot = Get-MarkerValue -MarkerPath $MarkerPath -Key "install_root"
   if ($MarkerSkill -and $MarkerSkill -cne $ExpectedSkill) { return $false }
@@ -323,7 +330,7 @@ function Install-OceansSkill {
       return
     }
     $ExistingSource = Get-MarkerValue -MarkerPath $Marker -Key "source_repository"
-    if ($ExistingSource -ne $Source.Repository) {
+    if ($ExistingSource -ne $Source.Repository -and -not (Test-LegacyFirstPartySource -ExistingSource $ExistingSource -RepositoryName $Source.Repository)) {
       Write-Host "duplicate-managed-source-mismatch: $SkillName"
       if ($LifecycleReconcile) { throw "Lifecycle restore found a managed source mismatch: $Target" }
       return
@@ -396,6 +403,34 @@ function Install-OceansSkill {
   else { Write-Host "Installed skill: $SkillName" }
 }
 
+function Install-FirstPartyFromCatalog {
+  param(
+    [Parameter(Mandatory = $true)] $InstallTarget,
+    [Parameter(Mandatory = $true)][string] $ResolvedInstallRoot
+  )
+  $SkillsDirectory = Join-Path $CatalogRoot "skills"
+  if (-not (Test-Path -LiteralPath $SkillsDirectory -PathType Container)) { return }
+  foreach ($RecordFile in @(Get-ChildItem -LiteralPath $SkillsDirectory -Filter '*.skill' -File)) {
+    $Record = Get-OceansCatalogRecord -Path $RecordFile.FullName
+    $SkillName = [string]$Record["name"]
+    $PackageRepository = [string]$Record["package_repository"]
+    $Status = [string]$Record["status"]
+    $Replacement = [string]$Record["replacement"]
+    if ($PackageRepository -eq "community-skills") { continue }
+    if ($TargetSkill -and $SkillName -cne $TargetSkill) { continue }
+    $ResolvedSkill = Resolve-OceansCatalogSkillDirectory -FirstPartySkillsRoot $FirstPartySkillsRoot -CommunitySkillsRoot $CommunitySkillsRoot -PackageRepository $PackageRepository -SkillName $SkillName -Replacement $Replacement -Status $Status
+    if (-not $ResolvedSkill.Ok) { throw "Unsupported package repository for ${SkillName}: $PackageRepository" }
+    if ($ResolvedSkill.Stub -or [string]::IsNullOrWhiteSpace([string]$ResolvedSkill.Path)) { continue }
+    if (-not (Test-Path -LiteralPath $ResolvedSkill.Path -PathType Container)) {
+      if ($Status -eq "active") { throw "Active skill package is missing: $SkillName" }
+      continue
+    }
+    $Source = [PSCustomObject]@{ Repository = $PackageRepository; Path = (Split-Path -Parent $ResolvedSkill.Path) }
+    $SkillDirectory = Get-Item -LiteralPath $ResolvedSkill.Path -Force
+    Install-OceansSkill -Source $Source -SkillDirectory $SkillDirectory -InstallTarget $InstallTarget -ResolvedInstallRoot $ResolvedInstallRoot
+  }
+}
+
 function Install-OceansSkillsFromSource {
   param(
     [Parameter(Mandatory = $true)] $Source,
@@ -431,9 +466,12 @@ foreach ($InstallTarget in $InstallTargets) {
     Reconcile-ManagedSkills -ResolvedInstallRoot $ResolvedInstallRoot
     Report-PendingCatalogRecords
     if (-not $ReconcileOnly) {
-      foreach ($Source in $Sources) {
-        Install-OceansSkillsFromSource -Source $Source -InstallTarget $InstallTarget -ResolvedInstallRoot $ResolvedInstallRoot
+      if ($CatalogEnabled) {
+        Install-FirstPartyFromCatalog -InstallTarget $InstallTarget -ResolvedInstallRoot $ResolvedInstallRoot
+      } else {
+        Install-OceansSkillsFromSource -Source ([PSCustomObject]@{ Repository = "oceans-skills"; Path = $FirstPartySkillsRoot }) -InstallTarget $InstallTarget -ResolvedInstallRoot $ResolvedInstallRoot
       }
+      Install-OceansSkillsFromSource -Source ([PSCustomObject]@{ Repository = "community-skills"; Path = $CommunitySkillsRoot }) -InstallTarget $InstallTarget -ResolvedInstallRoot $ResolvedInstallRoot
       Write-Host "Install root: $ResolvedInstallRoot"
     } else {
       Write-Host "Reconciled lifecycle state for install root: $ResolvedInstallRoot"

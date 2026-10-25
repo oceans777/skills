@@ -1,9 +1,4 @@
 repositories:
-  - name: oceans-skills
-    type: first-party
-    path: repos/oceans-skills
-    url: https://github.com/oceans777/oceans-skills.git
-    branch: main
   - name: community-skills
     type: community
     path: repos/community-skills

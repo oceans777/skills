@@ -28,10 +28,12 @@ Each installed oceans777 skill includes a marker file:
 The marker records source repository, repository source path, target runtime, and install root:
 
 ```text
-source_repository=oceans-skills
-source_path=repos/oceans-skills/skills/example-skill
+source_repository=fork-skill
+source_path=/path/to/skills/repos/fork-skill
 runtime=codex
 install_root=/home/example/.codex/skills
 ```
+
+`source_repository` is the catalog package name: the skill id for a first-party skill, or `community-skills` for a community skill. Markers that still say `source_repository=oceans-skills` stay managed and are updated from the skill repository.
 
 This allows future updates to replace managed skills while leaving unrelated local skills alone.

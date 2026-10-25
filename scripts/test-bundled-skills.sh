@@ -5,7 +5,7 @@ SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 SANDBOX_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/oceans-bundled-skills-test.XXXXXX")
 SANDBOX_ROOT=$(CDPATH= cd "$SANDBOX_ROOT" && pwd -P)
-AOS_ROOT=$REPO_ROOT/repos/oceans-skills/skills/agent-operating-system
+AOS_ROOT=$REPO_ROOT/repos/agent-operating-system
 UIUX_ROOT=$REPO_ROOT/repos/community-skills/skills/ui-ux-pro-max
 
 cleanup() {

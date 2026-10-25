@@ -21,7 +21,7 @@ $RepoRoot = Split-Path -Parent $ScriptRoot
 . (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly -InstallRoot $InstallRoot
 
 if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
-if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills" }
+if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos" }
 if (-not $CommunitySkillsRoot) { $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills" }
 $TempRoot = $null
 $LockHeld = $false
@@ -142,9 +142,9 @@ function Promote-Candidate {
   if ([string]::IsNullOrWhiteSpace($script:CandidateCommit)) { throw "catalog-candidate-not-found: $Skill" }
   $ReviewPath = Get-OceansCatalogReviewPath -CatalogRoot $CatalogRoot -PackageRepository $script:PackageRepository -SkillName $Skill
   $ExpectedContentSha256 = Assert-CandidateValid -CandidateRoot $ReviewPath
-  $TargetRoot = if ($script:PackageRepository -eq "oceans-skills") { $FirstPartySkillsRoot } else { $CommunitySkillsRoot }
+  $TargetRoot = if ($script:PackageRepository -eq "community-skills") { $CommunitySkillsRoot } else { $FirstPartySkillsRoot }
   $TargetPath = Join-Path $TargetRoot $Skill
-  if ($script:Status -eq "pending-review" -and (Test-Path -LiteralPath $TargetPath)) { throw "Pending new skill already exists in package repository: $Skill" }
+  if ($script:Status -eq "pending-review" -and (Test-Path -LiteralPath $TargetPath) -and $script:PackageRepository -cne $Skill) { throw "Pending new skill already exists in package repository: $Skill" }
 
   $script:TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "oceans-catalog-promote-$([Guid]::NewGuid().ToString('N'))"
   New-Item -ItemType Directory -Force -Path $script:TempRoot | Out-Null
@@ -164,7 +164,13 @@ function Promote-Candidate {
     Set-OceansCanonicalSkillPermissions -SkillPath $StagingPath
     $StagedContentSha256 = Get-OceansSkillContentSha256 -SkillPath $StagingPath
     if ($StagedContentSha256 -cne $ExpectedContentSha256) { throw "Candidate content changed during promotion: $Skill" }
-    Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $TargetPath
+    $GitPath = Join-Path $TargetPath ".git"
+    $PreserveGit = (Test-Path -LiteralPath $GitPath) -and (((Get-Item -LiteralPath $GitPath -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)
+    if ($PreserveGit) {
+      Complete-OceansSkillReplacePreservingGit -StagingPath $StagingPath -TargetPath $TargetPath
+    } else {
+      Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $TargetPath
+    }
     $PublishedContentSha256 = Get-OceansSkillContentSha256 -SkillPath $TargetPath
     if ($PublishedContentSha256 -cne $ExpectedContentSha256) { throw "Published content digest mismatch after promotion: $Skill" }
 

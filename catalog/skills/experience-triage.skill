@@ -1,7 +1,7 @@
 schema_version=2
 name=experience-triage
 status=archived
-package_repository=oceans-skills
+package_repository=experience-triage
 upstream_repository=https://github.com/oceans777/experience-triage
 upstream_path=.
 upstream_ref=main

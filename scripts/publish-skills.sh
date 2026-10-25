@@ -3,7 +3,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
-FIRST_PARTY_REPO_PATH=repos/oceans-skills
+FIRST_PARTY_REPO_PATH=
 COMMUNITY_REPO_PATH=repos/community-skills
 CATALOG_PATH=catalog
 DRY_RUN=0
@@ -136,12 +136,148 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+publish_discovered_skill_repos() {
+  [ -f "$REPO_ROOT/.gitmodules" ] || { echo "publish-missing-gitmodules" >&2; exit 1; }
+  names_file=$(mktemp "${TMPDIR:-/tmp}/oceans-publish-skills.XXXXXX") || exit 1
+  git config -f "$REPO_ROOT/.gitmodules" --get-regexp '^submodule\..*\.path$' | while read -r _key path; do
+    case "$path" in
+      repos/community-skills|repos/oceans-skills) ;;
+      repos/*)
+        name=${path#repos/}
+        case "$name" in */*) ;; *) printf '%s\n' "$name" ;; esac
+        ;;
+    esac
+  done > "$names_file"
+
+  assert_on_main "$REPO_ROOT" entry
+  assert_origin_remote "$REPO_ROOT" entry
+  update_origin_main "$REPO_ROOT" entry
+  assert_not_behind_origin_main "$REPO_ROOT" entry
+  assert_on_main "$COMMUNITY_REPO" community-skills
+  assert_origin_remote "$COMMUNITY_REPO" community-skills
+  update_origin_main "$COMMUNITY_REPO" community-skills
+  assert_not_behind_origin_main "$COMMUNITY_REPO" community-skills
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    repo=$REPO_ROOT/repos/$name
+    assert_on_main "$repo" "$name"
+    assert_origin_remote "$repo" "$name"
+    update_origin_main "$repo" "$name"
+    assert_not_behind_origin_main "$repo" "$name"
+  done < "$names_file"
+
+  set -- catalog "$COMMUNITY_REL"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    set -- "$@" "repos/$name"
+  done < "$names_file"
+  assert_repo_clean_outside_paths "$REPO_ROOT" entry "$@"
+  assert_repo_clean_outside_paths "$COMMUNITY_REPO" community-skills skills
+  assert_ahead_changes_inside_paths "$REPO_ROOT" entry "$@"
+  assert_ahead_changes_inside_paths "$COMMUNITY_REPO" community-skills skills
+
+  sh "$SCRIPT_DIR/validate-skills.sh" \
+    --first-party-root "$REPO_ROOT/repos" \
+    --community-root "$COMMUNITY_REPO/skills" \
+    --catalog-root "$CATALOG_ROOT"
+
+  skill_changed=0
+  community_changed=0
+  entry_changed=0
+  repo_has_changes_under_path "$COMMUNITY_REPO" skills && community_changed=1
+  entry_skill_changed=0
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if repo_has_changes_under_path "$REPO_ROOT" "repos/$name"; then entry_skill_changed=1; fi
+  done < "$names_file"
+  if [ "$entry_skill_changed" -eq 1 ] || repo_has_changes_under_path "$REPO_ROOT" "$COMMUNITY_REL" || repo_has_changes_under_path "$REPO_ROOT" "$CATALOG_PATH"; then
+    entry_changed=1
+  fi
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if repo_has_changes_under_path "$REPO_ROOT/repos/$name" . || repo_ahead "$REPO_ROOT/repos/$name"; then skill_changed=1; fi
+  done < "$names_file"
+  community_ahead=0
+  entry_ahead=0
+  repo_ahead "$COMMUNITY_REPO" && community_ahead=1
+  repo_ahead "$REPO_ROOT" && entry_ahead=1
+
+  if [ "$skill_changed" -eq 0 ] && [ "$community_changed" -eq 0 ] && [ "$entry_changed" -eq 0 ] && [ "$community_ahead" -eq 0 ] && [ "$entry_ahead" -eq 0 ]; then
+    rm -f "$names_file"
+    echo "publish-no-changes"
+    exit 0
+  fi
+
+  if [ "$DRY_RUN" -eq 1 ]; then
+    while IFS= read -r name; do
+      [ -n "$name" ] || continue
+      repo=$REPO_ROOT/repos/$name
+      if repo_has_changes_under_path "$repo" .; then echo "plan-commit-child: $name"; fi
+      if repo_has_changes_under_path "$repo" . || repo_ahead "$repo"; then echo "plan-push-child: $name"; fi
+    done < "$names_file"
+    [ "$community_changed" -eq 0 ] || echo "plan-commit-child: community-skills"
+    [ "$community_changed" -eq 0 ] && [ "$community_ahead" -eq 0 ] || echo "plan-push-child: community-skills"
+    echo "plan-commit-entry: release: publish skills and catalog"
+    echo "plan-push-entry-last: entry"
+    rm -f "$names_file"
+    exit 0
+  fi
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    repo=$REPO_ROOT/repos/$name
+    if repo_has_changes_under_path "$repo" .; then
+      invoke_git "stage $name" -C "$repo" add -A
+      if staged_changes_under_path "$repo" .; then
+        invoke_git "commit $name" -C "$repo" commit -m "skills: publish $name"
+      fi
+    fi
+  done < "$names_file"
+  prepare_child_commit "$COMMUNITY_REPO" community-skills "skills: publish staged community skills"
+
+  sh "$SCRIPT_DIR/validate-skills.sh" \
+    --first-party-root "$REPO_ROOT/repos" \
+    --community-root "$COMMUNITY_REPO/skills" \
+    --catalog-root "$CATALOG_ROOT"
+
+  invoke_git "stage entry release state" -C "$REPO_ROOT" add catalog "$COMMUNITY_REL"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    invoke_git "stage entry pin $name" -C "$REPO_ROOT" add "repos/$name"
+  done < "$names_file"
+  entry_needs_commit=0
+  if repo_has_changes_under_path "$REPO_ROOT" catalog || repo_has_changes_under_path "$REPO_ROOT" "$COMMUNITY_REL"; then
+    entry_needs_commit=1
+  fi
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if repo_has_changes_under_path "$REPO_ROOT" "repos/$name"; then entry_needs_commit=1; fi
+  done < "$names_file"
+  if [ "$entry_needs_commit" -eq 1 ]; then
+    invoke_git "commit entry release state" -C "$REPO_ROOT" commit -m "release: publish skills and catalog"
+  fi
+
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    repo=$REPO_ROOT/repos/$name
+    if repo_ahead "$repo"; then invoke_git_with_retry "push $name main" 3 1 -C "$repo" push --quiet origin main; fi
+  done < "$names_file"
+  if repo_ahead "$COMMUNITY_REPO"; then invoke_git_with_retry "push community-skills main" 3 1 -C "$COMMUNITY_REPO" push --quiet origin main; fi
+  if repo_ahead "$REPO_ROOT"; then invoke_git_with_retry "push entry main last" 3 1 -C "$REPO_ROOT" push --quiet origin main; fi
+  rm -f "$names_file"
+}
+
 REPO_ROOT=$(absolute_path "$REPO_ROOT")
-FIRST_PARTY_REPO=$(resolve_repo_path "$REPO_ROOT" "$FIRST_PARTY_REPO_PATH")
 COMMUNITY_REPO=$(resolve_repo_path "$REPO_ROOT" "$COMMUNITY_REPO_PATH")
-FIRST_PARTY_REL=$(relative_git_path "$REPO_ROOT" "$FIRST_PARTY_REPO")
 COMMUNITY_REL=$(relative_git_path "$REPO_ROOT" "$COMMUNITY_REPO")
 CATALOG_ROOT=$REPO_ROOT/$CATALOG_PATH
+if [ -z "$FIRST_PARTY_REPO_PATH" ]; then
+  publish_discovered_skill_repos
+  exit 0
+fi
+FIRST_PARTY_REPO=$(resolve_repo_path "$REPO_ROOT" "$FIRST_PARTY_REPO_PATH")
+FIRST_PARTY_REL=$(relative_git_path "$REPO_ROOT" "$FIRST_PARTY_REPO")
 
 for repo_info in "entry|$REPO_ROOT" "oceans-skills|$FIRST_PARTY_REPO" "community-skills|$COMMUNITY_REPO"; do
   name=${repo_info%%|*}; repo=${repo_info#*|}

@@ -1,7 +1,7 @@
 schema_version=2
 name=discuz-x5
 status=archived
-package_repository=oceans-skills
+package_repository=discuz-x5
 upstream_repository=https://github.com/oceans777/discuz-x5
 upstream_path=.
 upstream_ref=main

@@ -9,7 +9,7 @@ SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 
 SOURCE_ROOT=
 RUNTIME=codex
-FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+FIRST_PARTY_ROOT=$REPO_ROOT/repos
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 SKILL=
 TARGET=
@@ -134,11 +134,17 @@ if ! oceans_valid_skill_name "$SKILL"; then
   exit 1
 fi
 
+PER_SKILL_REPO=0
 case "$TARGET" in
   oceans)
     TARGET_ROOT=$FIRST_PARTY_ROOT
     OTHER_ROOT=$COMMUNITY_ROOT
-    TARGET_REPOSITORY=oceans-skills
+    if [ -e "$TARGET_ROOT/$SKILL/.git" ] && [ ! -L "$TARGET_ROOT/$SKILL/.git" ]; then
+      TARGET_REPOSITORY=$SKILL
+      PER_SKILL_REPO=1
+    else
+      TARGET_REPOSITORY=oceans-skills
+    fi
     ;;
   community)
     TARGET_ROOT=$COMMUNITY_ROOT
@@ -180,7 +186,11 @@ EOF
   fi
 fi
 
-TARGET_REPO=$(CDPATH= cd "$TARGET_ROOT/.." && pwd -P)
+if [ "$PER_SKILL_REPO" -eq 1 ]; then
+  TARGET_REPO=$TARGET_ROOT/$SKILL
+else
+  TARGET_REPO=$(CDPATH= cd "$TARGET_ROOT/.." && pwd -P)
+fi
 
 git_text() {
   repo=$1
@@ -195,7 +205,7 @@ if [ "$branch" != "main" ]; then
 fi
 
 status=$(git -C "$TARGET_REPO" status --porcelain)
-if [ -n "$status" ]; then
+if [ "$PER_SKILL_REPO" -eq 0 ] && [ -n "$status" ]; then
   old_ifs=$IFS
   IFS='
 '
@@ -429,7 +439,14 @@ if [ "$TARGET" = "community" ]; then
   fi
 fi
 
-if ! oceans_commit_staged_directory "$STAGING_PATH" "$TARGET_PATH"; then
+if [ "$PER_SKILL_REPO" -eq 1 ]; then
+  commit_ok=0
+  oceans_replace_skill_preserving_git "$STAGING_PATH" "$TARGET_PATH" && commit_ok=1
+else
+  commit_ok=0
+  oceans_commit_staged_directory "$STAGING_PATH" "$TARGET_PATH" && commit_ok=1
+fi
+if [ "$commit_ok" -ne 1 ]; then
   echo "Failed to commit staged skill; existing repository content was preserved or restored: $SKILL" >&2
   exit 1
 fi

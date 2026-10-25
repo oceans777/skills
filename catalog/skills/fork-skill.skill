@@ -1,7 +1,7 @@
 schema_version=2
 name=fork-skill
 status=active
-package_repository=oceans-skills
+package_repository=fork-skill
 upstream_repository=https://github.com/oceans777/fork-skill
 upstream_path=.
 upstream_ref=main

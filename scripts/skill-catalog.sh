@@ -105,6 +105,86 @@ oceans_catalog_valid_upstream_path() {
 }
 
 
+# community-skills is the only multi-skill package. oceans-skills remains
+# readable so older catalogs and fixtures still validate. A first-party skill
+# repository uses its own skill id. An archived rename stub uses the
+# replacement skill id and has no local package directory.
+oceans_catalog_package_repository_allowed() {
+  package_repository=$1
+  case "$package_repository" in
+    community-skills|oceans-skills) return 0 ;;
+  esac
+  oceans_catalog_valid_skill_name "$package_repository"
+}
+
+
+oceans_catalog_is_catalog_only_stub() {
+  package_repository=$1
+  skill_name=$2
+  replacement=$3
+  status=$4
+  [ "$status" = archived ] || return 1
+  [ -n "$replacement" ] || return 1
+  [ "$package_repository" = "$replacement" ] || return 1
+  [ "$package_repository" != "$skill_name" ] || return 1
+  return 0
+}
+
+
+# Prints the skill directory. Prints nothing for a catalog-only stub.
+oceans_catalog_skill_directory() {
+  first_party_root=$1
+  community_root=$2
+  package_repository=$3
+  skill_name=$4
+  replacement=${5:-}
+  status=${6:-}
+  case "$package_repository" in
+    community-skills|oceans-skills)
+      if [ "$package_repository" = community-skills ]; then
+        printf '%s/%s\n' "$community_root" "$skill_name"
+      else
+        printf '%s/%s\n' "$first_party_root" "$skill_name"
+      fi
+      return 0
+      ;;
+  esac
+  oceans_catalog_valid_skill_name "$package_repository" || return 1
+  if [ "$package_repository" = "$skill_name" ]; then
+    printf '%s/%s\n' "$first_party_root" "$skill_name"
+    return 0
+  fi
+  if oceans_catalog_is_catalog_only_stub "$package_repository" "$skill_name" "$replacement" "$status"; then
+    return 0
+  fi
+  return 1
+}
+
+
+oceans_catalog_hub_repos_layout() {
+  first_party_root=$1
+  parent=$(dirname "$first_party_root")
+  base=$(basename "$first_party_root")
+  [ "$base" = repos ] && [ -f "$parent/.gitmodules" ]
+}
+
+
+oceans_catalog_hub_skill_names() {
+  first_party_root=$1
+  parent=$(dirname "$first_party_root")
+  git config -f "$parent/.gitmodules" --get-regexp '^submodule\..*\.path$' | while read -r _key path; do
+    case "$path" in
+      repos/community-skills|repos/oceans-skills) continue ;;
+      repos/*)
+        name=${path#repos/}
+        case "$name" in */*) continue ;; esac
+        printf '%s\n' "$name"
+        ;;
+    esac
+  done
+}
+
+
 oceans_catalog_acquire_lock() {
   catalog_root=$1
   skill_name=$2
@@ -172,10 +252,10 @@ oceans_catalog_write_record() {
     echo "Unsupported catalog state: $status" >&2
     return 1
   }
-  case "$package_repository" in
-    oceans-skills|community-skills) ;;
-    *) echo "Unsupported package repository: $package_repository" >&2; return 1 ;;
-  esac
+  if ! oceans_catalog_package_repository_allowed "$package_repository"; then
+    echo "Unsupported package repository: $package_repository" >&2
+    return 1
+  fi
   for value in "$skill_name" "$status" "$package_repository" "$upstream_repository" "$upstream_path" "$upstream_ref" "$upstream_commit" "$candidate_upstream_repository" "$candidate_upstream_path" "$candidate_upstream_ref" "$candidate_upstream_commit" "$replacement" "$status_reason" "$transition_note" "$content_sha256" "$candidate_content_sha256"; do
     oceans_catalog_safe_value "$value" || {
       echo "Catalog values must be single-line text." >&2
@@ -291,11 +371,11 @@ oceans_catalog_validation_issues() {
     oceans_catalog_valid_skill_name "$skill_name" || echo "Invalid catalog filename: $record_file"
     [ "$name" = "$skill_name" ] || echo "Catalog name mismatch: $skill_name"
     oceans_catalog_valid_state "$status" || echo "Unsupported catalog status for $skill_name: $status"
-    case "$package_repository" in
-      oceans-skills) repository_root=$first_party_skills_root ;;
-      community-skills) repository_root=$community_skills_root ;;
-      *) echo "Unsupported package repository for $skill_name: $package_repository"; repository_root= ;;
-    esac
+    skill_dir=
+    if ! skill_dir=$(oceans_catalog_skill_directory "$first_party_skills_root" "$community_skills_root" "$package_repository" "$skill_name" "$replacement" "$status"); then
+      echo "Unsupported package repository for $skill_name: $package_repository"
+      skill_dir=
+    fi
 
     current_count=0
     [ -n "$upstream_repository" ] && current_count=$((current_count + 1))
@@ -319,8 +399,8 @@ oceans_catalog_validation_issues() {
       oceans_catalog_valid_repository_url "$upstream_repository" || echo "Invalid upstream repository for $skill_name"
       oceans_catalog_valid_upstream_path "$upstream_path" || echo "Invalid upstream path for $skill_name: $upstream_path"
       case "$upstream_commit" in ''|*[!0-9a-f]*|???????????????????????????????????????|?????????????????????????????????????????*) echo "Invalid upstream commit for $skill_name" ;; esac
-      if [ -n "$content_sha256" ] && [ -n "$repository_root" ] && [ -d "$repository_root/$skill_name" ]; then
-        actual_content_sha256=$(oceans_skill_content_sha256 "$repository_root/$skill_name" 2>/dev/null || true)
+      if [ -n "$content_sha256" ] && [ -n "$skill_dir" ] && [ -d "$skill_dir" ]; then
+        actual_content_sha256=$(oceans_skill_content_sha256 "$skill_dir" 2>/dev/null || true)
         [ -n "$actual_content_sha256" ] || echo "Unable to calculate published content SHA-256 for $skill_name"
         [ -z "$actual_content_sha256" ] || [ "$actual_content_sha256" = "$content_sha256" ] || echo "Published content SHA-256 mismatch for $skill_name"
       fi
@@ -344,19 +424,23 @@ oceans_catalog_validation_issues() {
       pending-review)
         [ "$current_count" -eq 0 ] || echo "Pending new skill must not have current provenance: $skill_name"
         [ "$candidate_count" -eq 4 ] || echo "Pending new skill must have a complete candidate: $skill_name"
-        [ -z "$repository_root" ] || [ ! -d "$repository_root/$skill_name" ] || echo "Pending new skill already exists in package repository: $skill_name"
+        if [ "$package_repository" = community-skills ] || [ "$package_repository" = oceans-skills ]; then
+          [ -z "$skill_dir" ] || [ ! -d "$skill_dir" ] || echo "Pending new skill already exists in package repository: $skill_name"
+        fi
         [ -z "$status_reason" ] || echo "Pending skill must not keep a status reason: $skill_name"
         ;;
       active)
         [ "$current_count" -eq 4 ] || echo "Active skill lacks current provenance: $skill_name"
         [ -z "$status_reason" ] || echo "Active skill must not keep a status reason: $skill_name"
-        [ -z "$repository_root" ] || [ -d "$repository_root/$skill_name" ] || echo "Active skill package is missing: $package_repository/$skill_name"
+        [ -n "$skill_dir" ] && [ -d "$skill_dir" ] || echo "Active skill package is missing: $package_repository/$skill_name"
         ;;
       deprecated|archived|blocked)
         [ "$current_count" -eq 4 ] || echo "$status skill lacks current provenance: $skill_name"
         [ "$candidate_count" -eq 0 ] || echo "$status skill cannot have a pending candidate: $skill_name"
         [ -n "$status_reason" ] || echo "Missing lifecycle reason for $status skill: $skill_name"
-        [ -z "$repository_root" ] || [ -d "$repository_root/$skill_name" ] || echo "$status skill package is missing: $package_repository/$skill_name"
+        if ! oceans_catalog_is_catalog_only_stub "$package_repository" "$skill_name" "$replacement" "$status"; then
+          [ -n "$skill_dir" ] && [ -d "$skill_dir" ] || echo "$status skill package is missing: $package_repository/$skill_name"
+        fi
         ;;
     esac
 
@@ -374,28 +458,66 @@ oceans_catalog_validation_issues() {
     printf '%s\n' "$updated_at" | grep -E -q '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' || echo "Invalid updated_at for $skill_name"
   done
 
-  for repository_entry in "oceans-skills|$first_party_skills_root" "community-skills|$community_skills_root"; do
-    package_repository=${repository_entry%%|*}
-    skills_root=${repository_entry#*|}
-    [ -d "$skills_root" ] || continue
-    for skill_path in "$skills_root"/*; do
+  if oceans_catalog_hub_repos_layout "$first_party_skills_root"; then
+    hub_names=$(mktemp "${TMPDIR:-/tmp}/oceans-hub-skills.XXXXXX") || return 1
+    oceans_catalog_hub_skill_names "$first_party_skills_root" > "$hub_names"
+    while IFS= read -r skill_name; do
+      [ -n "$skill_name" ] || continue
+      skill_path=$first_party_skills_root/$skill_name
+      if [ ! -d "$skill_path" ]; then
+        echo "Pinned skill repository is missing: $skill_name"
+        continue
+      fi
+      record_path=$(oceans_catalog_record_path "$catalog_root" "$skill_name")
+      if [ ! -f "$record_path" ]; then
+        echo "Skill is missing from catalog: $skill_name"
+        continue
+      fi
+      record_repository=$(oceans_catalog_record_value "$record_path" package_repository || true)
+      [ "$record_repository" = "$skill_name" ] || echo "Catalog repository mismatch for $skill_name: $record_repository"
+    done < "$hub_names"
+    rm -f "$hub_names"
+  else
+    skills_root=$first_party_skills_root
+    package_repository=oceans-skills
+    if [ -d "$skills_root" ]; then
+      for skill_path in "$skills_root"/*; do
+        [ -d "$skill_path" ] || continue
+        skill_name=${skill_path##*/}
+        record_path=$(oceans_catalog_record_path "$catalog_root" "$skill_name")
+        if [ ! -f "$record_path" ]; then
+          echo "Skill is missing from catalog: $package_repository/$skill_name"
+          continue
+        fi
+        record_repository=$(oceans_catalog_record_value "$record_path" package_repository || true)
+        [ "$record_repository" = "$package_repository" ] || echo "Catalog repository mismatch for $skill_name: $record_repository"
+        status=$(oceans_catalog_record_value "$record_path" status || true)
+        [ "$status" != pending-review ] || echo "Pending new skill must not exist in active package directory: $skill_name"
+      done
+    fi
+  fi
+
+  if [ -d "$community_skills_root" ]; then
+    for skill_path in "$community_skills_root"/*; do
       [ -d "$skill_path" ] || continue
       skill_name=${skill_path##*/}
       record_path=$(oceans_catalog_record_path "$catalog_root" "$skill_name")
       if [ ! -f "$record_path" ]; then
-        echo "Skill is missing from catalog: $package_repository/$skill_name"
+        echo "Skill is missing from catalog: community-skills/$skill_name"
         continue
       fi
       record_repository=$(oceans_catalog_record_value "$record_path" package_repository || true)
-      [ "$record_repository" = "$package_repository" ] || echo "Catalog repository mismatch for $skill_name: $record_repository"
+      [ "$record_repository" = community-skills ] || echo "Catalog repository mismatch for $skill_name: $record_repository"
       status=$(oceans_catalog_record_value "$record_path" status || true)
       [ "$status" != pending-review ] || echo "Pending new skill must not exist in active package directory: $skill_name"
     done
-  done
+  fi
 
-  for package_repository in oceans-skills community-skills; do
-    review_root=$catalog_root/review-queue/$package_repository
+  review_queue=$catalog_root/review-queue
+  if [ -d "$review_queue" ]; then
+    for review_root in "$review_queue"/*; do
     [ -d "$review_root" ] || continue
+    package_repository=${review_root##*/}
     for review_path in "$review_root"/*; do
       [ -d "$review_path" ] || continue
       skill_name=${review_path##*/}
@@ -411,5 +533,6 @@ oceans_catalog_validation_issues() {
       [ -n "$candidate_commit" ] || echo "Orphan candidate review content: $package_repository/$skill_name"
       [ -n "$candidate_content_sha256" ] || echo "Candidate content SHA-256 is missing: $package_repository/$skill_name"
     done
-  done
+    done
+  fi
 }

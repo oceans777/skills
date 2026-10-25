@@ -183,7 +183,7 @@ try {
   New-Item -ItemType Directory -Force -Path $PreparedSkill | Out-Null
   Get-ChildItem -LiteralPath $SourceSkill -Force | Copy-Item -Destination $PreparedSkill -Recurse -Force
   Remove-OceansExcludedPaths -RootPath $PreparedSkill
-  $PackageRepository = if ($Target -eq "oceans") { "oceans-skills" } else { "community-skills" }
+  $PackageRepository = if ($Target -eq "oceans") { $SkillName } else { "community-skills" }
 
   if ($Target -eq "community") {
     $PreparedLicense = Join-Path $PreparedSkill "LICENSE"

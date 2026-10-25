@@ -28,7 +28,7 @@ function Remove-TestRoot {
 
 try {
   $SkillName = "fork-skill"
-  $PublishedSkill = Join-Path $RepoRoot "repos\oceans-skills\skills\$SkillName"
+  $PublishedSkill = Join-Path $RepoRoot "repos\$SkillName"
   $CatalogRecord = Join-Path $RepoRoot "catalog\skills\$SkillName.skill"
   $ContentSha256 = Get-OceansSkillContentSha256 -SkillPath $PublishedSkill
   Write-Host "$SkillName-content-sha256=$ContentSha256"
@@ -83,7 +83,7 @@ try {
     Assert-PathExists (Join-Path $Skill "scripts\sync-upstream.ps1")
     Assert-FileContains (Join-Path $Skill "SKILL.md") "name: fork-skill"
     Assert-FileContains (Join-Path $Skill "SKILL.md") "upstream/main"
-    Assert-FileContains $Marker "source_repository=oceans-skills"
+    Assert-FileContains $Marker "source_repository=fork-skill"
     Assert-FileContains $Marker "runtime=$($Target.Runtime)"
     Assert-PathExists (Join-Path $Target.Root "prd-skill\SKILL.md")
     Assert-FileContains (Join-Path $Target.Root "prd-skill\SKILL.md") "name: prd-skill"

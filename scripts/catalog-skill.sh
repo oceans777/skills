@@ -11,7 +11,7 @@ SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 ACTION=${1:-list}
 if [ "$#" -gt 0 ]; then shift; fi
 CATALOG_ROOT=$REPO_ROOT/catalog
-FIRST_PARTY_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+FIRST_PARTY_ROOT=$REPO_ROOT/repos
 COMMUNITY_ROOT=$REPO_ROOT/repos/community-skills/skills
 INSTALL_ROOT=
 SKIP_RUNTIME_RECONCILE=0
@@ -179,12 +179,11 @@ promote_candidate() {
   expected_content_sha256=$(validate_candidate "$REVIEW_PATH") || exit 1
 
   case "$PACKAGE_REPOSITORY" in
-    oceans-skills) target_root=$FIRST_PARTY_ROOT ;;
     community-skills) target_root=$COMMUNITY_ROOT ;;
-    *) echo "Unsupported package repository: $PACKAGE_REPOSITORY" >&2; exit 1 ;;
+    *) target_root=$FIRST_PARTY_ROOT ;;
   esac
   target_path=$target_root/$SKILL
-  if [ "$STATUS" = pending-review ] && [ -e "$target_path" ]; then
+  if [ "$STATUS" = pending-review ] && [ -e "$target_path" ] && [ "$PACKAGE_REPOSITORY" != "$SKILL" ]; then
     echo "Pending new skill already exists in package repository: $SKILL" >&2
     exit 1
   fi
@@ -203,7 +202,13 @@ promote_candidate() {
   }
   if cp -R "$review_hold"/. "$staging_path" && oceans_remove_excluded_paths "$staging_path" && oceans_normalize_skill_permissions "$staging_path"; then
     staged_content_sha256=$(oceans_skill_content_sha256 "$staging_path" || true)
-    if [ "$staged_content_sha256" = "$expected_content_sha256" ] && oceans_commit_staged_directory "$staging_path" "$target_path"; then
+    committed=1
+    if [ -e "$target_path/.git" ] && [ ! -L "$target_path/.git" ]; then
+      oceans_replace_skill_preserving_git "$staging_path" "$target_path" || committed=0
+    else
+      oceans_commit_staged_directory "$staging_path" "$target_path" || committed=0
+    fi
+    if [ "$staged_content_sha256" = "$expected_content_sha256" ] && [ "$committed" -eq 1 ]; then
       published_content_sha256=$(oceans_skill_content_sha256 "$target_path" || true)
       if [ "$published_content_sha256" = "$expected_content_sha256" ] && oceans_catalog_write_record "$CATALOG_ROOT" "$SKILL" active "$PACKAGE_REPOSITORY" \
         "$CANDIDATE_REPOSITORY" "$CANDIDATE_PATH" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \

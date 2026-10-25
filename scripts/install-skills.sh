@@ -10,7 +10,7 @@ SKILL_ROOTS_LIB_ONLY=1 . "$SCRIPT_DIR/skill-roots.sh"
 INSTALL_ROOT=
 RUNTIME=codex
 ALL_EXISTING_RUNTIMES=0
-FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos
 COMMUNITY_SKILLS_ROOT=$REPO_ROOT/repos/community-skills/skills
 CATALOG_ROOT=$REPO_ROOT/catalog
 CATALOG_EXPLICIT=0
@@ -159,7 +159,22 @@ marker_value() {
 
 is_known_oceans_source() {
   repository=$1
-  [ "$repository" = oceans-skills ] || [ "$repository" = community-skills ]
+  skill_name=$2
+  case "$repository" in
+    community-skills|oceans-skills) return 0 ;;
+  esac
+  if [ "$CATALOG_ENABLED" -eq 1 ] && oceans_catalog_valid_skill_name "$repository"; then
+    record_repository=$(oceans_catalog_repository_for_skill "$CATALOG_ROOT" "$skill_name" 2>/dev/null || true)
+    [ "$record_repository" = "$repository" ]
+    return
+  fi
+  return 1
+}
+
+legacy_first_party_source() {
+  existing_source=$1
+  repository_name=$2
+  [ "$existing_source" = oceans-skills ] && [ "$repository_name" != community-skills ]
 }
 
 marker_is_managed() {
@@ -168,7 +183,7 @@ marker_is_managed() {
   expected_root=$3
   [ -f "$marker" ] && [ ! -L "$marker" ] || return 1
   source_repository=$(marker_value "$marker" source_repository)
-  is_known_oceans_source "$source_repository" || return 1
+  is_known_oceans_source "$source_repository" "$expected_skill" || return 1
   marker_skill=$(marker_value "$marker" skill_name)
   marker_root=$(marker_value "$marker" install_root)
   [ -z "$marker_skill" ] || [ "$marker_skill" = "$expected_skill" ] || return 1
@@ -386,7 +401,7 @@ install_one_skill() {
       return 0
     fi
     existing_source=$(marker_value "$marker" source_repository)
-    if [ "$existing_source" != "$repository_name" ]; then
+    if [ "$existing_source" != "$repository_name" ] && ! legacy_first_party_source "$existing_source" "$repository_name"; then
       echo "duplicate-managed-source-mismatch: $skill_name"
       [ "$LIFECYCLE_RECONCILE" -eq 0 ] || return 1
       return 0
@@ -461,6 +476,33 @@ install_one_skill() {
   if [ "$is_update" -eq 1 ]; then echo "Updated managed oceans777 skill: $skill_name"; else echo "Installed skill: $skill_name"; fi
 }
 
+install_first_party_from_catalog() {
+  runtime=$1
+  install_root_real=$2
+  for record_path in "$CATALOG_ROOT/skills"/*.skill; do
+    [ -f "$record_path" ] || continue
+    skill_name=$(oceans_catalog_record_value "$record_path" name || true)
+    package_repository=$(oceans_catalog_record_value "$record_path" package_repository || true)
+    status=$(oceans_catalog_record_value "$record_path" status || true)
+    replacement=$(oceans_catalog_record_value "$record_path" replacement || true)
+    [ "$package_repository" != community-skills ] || continue
+    [ -z "$TARGET_SKILL" ] || [ "$skill_name" = "$TARGET_SKILL" ] || continue
+    if ! skill_dir=$(oceans_catalog_skill_directory "$FIRST_PARTY_SKILLS_ROOT" "$COMMUNITY_SKILLS_ROOT" "$package_repository" "$skill_name" "$replacement" "$status"); then
+      echo "Unsupported package repository for $skill_name: $package_repository" >&2
+      return 1
+    fi
+    [ -n "$skill_dir" ] || continue
+    if [ ! -d "$skill_dir" ]; then
+      if [ "$status" = active ]; then
+        echo "Active skill package is missing: $skill_name" >&2
+        return 1
+      fi
+      continue
+    fi
+    install_one_skill "$package_repository" "$skill_dir" "$runtime" "$install_root_real" || return 1
+  done
+}
+
 install_from_repository() {
   repository_name=$1
   source_path=$2
@@ -499,7 +541,11 @@ while IFS='|' read -r target_runtime install_root_real; do
   report_catalog_only_pending
 
   if [ "$RECONCILE_ONLY" -eq 0 ]; then
-    if ! install_from_repository oceans-skills "$FIRST_PARTY_SKILLS_ROOT" "$target_runtime" "$install_root_real"; then
+    if [ "$CATALOG_ENABLED" -eq 1 ]; then
+      if ! install_first_party_from_catalog "$target_runtime" "$install_root_real"; then
+        root_failure=1
+      fi
+    elif ! install_from_repository oceans-skills "$FIRST_PARTY_SKILLS_ROOT" "$target_runtime" "$install_root_real"; then
       root_failure=1
     fi
     if ! install_from_repository community-skills "$COMMUNITY_SKILLS_ROOT" "$target_runtime" "$install_root_real"; then
