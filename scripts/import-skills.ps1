@@ -17,9 +17,10 @@ $RequestedSourceRoot = $SourceRoot
 $RequestedRuntime = $Runtime
 . (Join-Path $ScriptRoot "skill-roots.ps1") -DefineOnly
 . (Join-Path $ScriptRoot "skill-publish-rules.ps1")
+. (Join-Path $ScriptRoot "skill-catalog.ps1")
 
 if (-not $FirstPartySkillsRoot) {
-  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
+  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos"
 }
 
 if (-not $CommunitySkillsRoot) {
@@ -47,7 +48,11 @@ function Get-RepositoryMatch {
   $Matches = New-Object System.Collections.Generic.List[string]
 
   if (Test-Path -LiteralPath (Join-Path $FirstPartyRoot $SkillName) -PathType Container) {
-    $Matches.Add("oceans-skills")
+    if (Test-OceansCatalogHubReposLayout -FirstPartySkillsRoot $FirstPartyRoot) {
+      $Matches.Add($SkillName)
+    } else {
+      $Matches.Add("oceans-skills")
+    }
   }
 
   if (Test-Path -LiteralPath (Join-Path $CommunityRoot $SkillName) -PathType Container) {
@@ -196,6 +201,22 @@ function New-SkillReportItem {
       RepositoryMatch = $RepositoryMatch
       LocalRuntimeMatch = $LocalRuntimeMatch
       Action = "managed by oceans777; install may update it"
+      Reason = "Local skill has a legacy oceans-skills source marker. Reinstall from the skill repository."
+      Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
+    }
+  }
+
+  if ($ManagedSource -and (Test-OceansCatalogSkillName -Name $ManagedSource) -and $ManagedSource -cne "community-skills") {
+    return [ordered]@{
+      Name = $Name
+      Runtime = $Runtime
+      SourceRoot = $SourceRoot
+      SourcePath = $SkillPath
+      Status = "already-managed"
+      Destination = "repos/$ManagedSource"
+      RepositoryMatch = $RepositoryMatch
+      LocalRuntimeMatch = $LocalRuntimeMatch
+      Action = "managed by oceans777; install may update it"
       Reason = "Local skill has an oceans777 first-party source marker."
       Risks = @(Get-ReportRiskNotes -SkillPath $SkillPath -ExpectedName $Name)
     }
@@ -255,7 +276,7 @@ function New-SkillReportItem {
     SourceRoot = $SourceRoot
     SourcePath = $SkillPath
     Status = "review-source"
-    Destination = "oceans-skills if you created it; community-skills if third-party; do not publish if private"
+    Destination = "the skill repository https://github.com/oceans777/<skill-id> if you created it; community-skills if third-party; do not publish if private"
     RepositoryMatch = $RepositoryMatch
     LocalRuntimeMatch = $LocalRuntimeMatch
     Action = "review source before publishing"

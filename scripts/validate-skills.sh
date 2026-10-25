@@ -6,7 +6,7 @@ REPO_ROOT=$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)
 . "$SCRIPT_DIR/skill-publish-rules.sh"
 . "$SCRIPT_DIR/skill-catalog.sh"
 
-FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos/oceans-skills/skills
+FIRST_PARTY_SKILLS_ROOT=$REPO_ROOT/repos
 COMMUNITY_SKILLS_ROOT=$REPO_ROOT/repos/community-skills/skills
 CATALOG_ROOT=$REPO_ROOT/catalog
 CATALOG_EXPLICIT=0
@@ -108,7 +108,18 @@ test_skill_directory() {
 }
 
 test_duplicate_names() {
-  [ -d "$FIRST_PARTY_SKILLS_ROOT" ] && [ -d "$COMMUNITY_SKILLS_ROOT" ] || return
+  [ -d "$COMMUNITY_SKILLS_ROOT" ] || return
+  if oceans_catalog_hub_repos_layout "$FIRST_PARTY_SKILLS_ROOT"; then
+    names_file=$(mktemp "${TMPDIR:-/tmp}/oceans-duplicate-names.XXXXXX") || return 1
+    oceans_catalog_hub_skill_names "$FIRST_PARTY_SKILLS_ROOT" > "$names_file"
+    while IFS= read -r skill_name; do
+      [ -n "$skill_name" ] || continue
+      [ ! -d "$COMMUNITY_SKILLS_ROOT/$skill_name" ] || add_failure "Duplicate skill name across repositories: $skill_name"
+    done < "$names_file"
+    rm -f "$names_file"
+    return
+  fi
+  [ -d "$FIRST_PARTY_SKILLS_ROOT" ] || return
   for skill_path in "$FIRST_PARTY_SKILLS_ROOT"/*; do
     [ -d "$skill_path" ] || continue
     skill_name=${skill_path##*/}
@@ -116,7 +127,17 @@ test_duplicate_names() {
   done
 }
 
-test_skill_directory oceans-skills "$FIRST_PARTY_SKILLS_ROOT" false
+if oceans_catalog_hub_repos_layout "$FIRST_PARTY_SKILLS_ROOT"; then
+  names_file=$(mktemp "${TMPDIR:-/tmp}/oceans-validate-names.XXXXXX") || exit 1
+  oceans_catalog_hub_skill_names "$FIRST_PARTY_SKILLS_ROOT" > "$names_file"
+  while IFS= read -r skill_name; do
+    [ -n "$skill_name" ] || continue
+    test_skill_path "$skill_name" "$skill_name" "$FIRST_PARTY_SKILLS_ROOT/$skill_name" false
+  done < "$names_file"
+  rm -f "$names_file"
+else
+  test_skill_directory "$(basename "$FIRST_PARTY_SKILLS_ROOT")" "$FIRST_PARTY_SKILLS_ROOT" false
+fi
 test_skill_directory community-skills "$COMMUNITY_SKILLS_ROOT" true
 test_duplicate_names
 

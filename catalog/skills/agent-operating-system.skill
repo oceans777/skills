@@ -1,7 +1,7 @@
 schema_version=2
 name=agent-operating-system
 status=archived
-package_repository=oceans-skills
+package_repository=agent-operating-system
 upstream_repository=https://github.com/oceans777/agent-operating-system
 upstream_path=.
 upstream_ref=main

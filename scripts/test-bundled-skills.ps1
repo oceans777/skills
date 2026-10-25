@@ -4,7 +4,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptDir
 $CanonicalTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).Path)
 $TestRoot = Join-Path $CanonicalTemp ("oceans-bundled-skills-test-" + [Guid]::NewGuid().ToString('N'))
-$AosRoot = Join-Path $RepoRoot 'repos\oceans-skills\skills\agent-operating-system'
+$AosRoot = Join-Path $RepoRoot 'repos\agent-operating-system'
 
 function Invoke-Git {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)

@@ -14,7 +14,7 @@ $Failures = New-Object System.Collections.Generic.List[string]
 $CustomSourceRoots = $PSBoundParameters.ContainsKey("FirstPartySkillsRoot") -or $PSBoundParameters.ContainsKey("CommunitySkillsRoot")
 $CatalogExplicit = $PSBoundParameters.ContainsKey("CatalogRoot")
 
-if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills" }
+if (-not $FirstPartySkillsRoot) { $FirstPartySkillsRoot = Join-Path $RepoRoot "repos" }
 if (-not $CommunitySkillsRoot) { $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills" }
 if (-not $CatalogRoot) { $CatalogRoot = Join-Path $RepoRoot "catalog" }
 if ($CustomSourceRoots -and -not $CatalogExplicit -and -not $WithoutCatalog) {
@@ -75,10 +75,20 @@ function Test-SkillDirectory {
   }
 }
 
-Test-SkillDirectory -RepositoryName "oceans-skills" -SkillsPath $FirstPartySkillsRoot -RequireUpstream $false
+if (Test-OceansCatalogHubReposLayout -FirstPartySkillsRoot $FirstPartySkillsRoot) {
+  foreach ($SkillName in @(Get-OceansCatalogHubSkillNames -FirstPartySkillsRoot $FirstPartySkillsRoot)) {
+    Test-SkillPath -RepositoryName $SkillName -SkillName $SkillName -SkillPath (Join-Path $FirstPartySkillsRoot $SkillName) -RequireUpstream $false
+  }
+} else {
+  Test-SkillDirectory -RepositoryName (Split-Path -Leaf $FirstPartySkillsRoot) -SkillsPath $FirstPartySkillsRoot -RequireUpstream $false
+}
 Test-SkillDirectory -RepositoryName "community-skills" -SkillsPath $CommunitySkillsRoot -RequireUpstream $true
 
-$FirstPartyNames = if (Test-Path -LiteralPath $FirstPartySkillsRoot -PathType Container) { @(Get-ChildItem -LiteralPath $FirstPartySkillsRoot -Directory | ForEach-Object { $_.Name }) } else { @() }
+$FirstPartyNames = if (Test-OceansCatalogHubReposLayout -FirstPartySkillsRoot $FirstPartySkillsRoot) {
+  @(Get-OceansCatalogHubSkillNames -FirstPartySkillsRoot $FirstPartySkillsRoot)
+} elseif (Test-Path -LiteralPath $FirstPartySkillsRoot -PathType Container) {
+  @(Get-ChildItem -LiteralPath $FirstPartySkillsRoot -Directory | ForEach-Object { $_.Name })
+} else { @() }
 $CommunityNames = if (Test-Path -LiteralPath $CommunitySkillsRoot -PathType Container) { @(Get-ChildItem -LiteralPath $CommunitySkillsRoot -Directory | ForEach-Object { $_.Name }) } else { @() }
 foreach ($Name in $FirstPartyNames) {
   if ($CommunityNames -contains $Name) { $Failures.Add("Duplicate skill name across repositories: $Name") }

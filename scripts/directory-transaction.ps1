@@ -22,6 +22,51 @@ function Remove-OceansExcludedPaths {
     ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
 }
 
+function Complete-OceansSkillReplacePreservingGit {
+  param(
+    [Parameter(Mandatory = $true)][string] $StagingPath,
+    [Parameter(Mandatory = $true)][string] $TargetPath
+  )
+
+  $StagedItem = Get-Item -LiteralPath $StagingPath -Force
+  $TargetItem = Get-Item -LiteralPath $TargetPath -Force
+  if (-not $StagedItem.PSIsContainer -or (($StagedItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+    throw "Invalid staged directory: $StagingPath"
+  }
+  if (-not $TargetItem.PSIsContainer -or (($TargetItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+    throw "Invalid skill repository: $TargetPath"
+  }
+  $GitPath = Join-Path $TargetPath ".git"
+  if (-not (Test-Path -LiteralPath $GitPath)) { throw "Skill repository is missing .git: $TargetPath" }
+  $GitItem = Get-Item -LiteralPath $GitPath -Force
+  if (($GitItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw "Refusing to preserve a reparse-point .git: $GitPath"
+  }
+
+  $Backup = Join-Path ([System.IO.Path]::GetTempPath()) ("oceans-git-preserve-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $Backup | Out-Null
+  try {
+    Get-ChildItem -LiteralPath $TargetPath -Force | Where-Object { $_.Name -cne ".git" } | ForEach-Object {
+      Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Backup $_.Name) -Recurse -Force
+    }
+    Get-ChildItem -LiteralPath $TargetPath -Force | Where-Object { $_.Name -cne ".git" } | ForEach-Object {
+      Remove-Item -LiteralPath $_.FullName -Recurse -Force
+    }
+    Get-ChildItem -LiteralPath $StagingPath -Force | Copy-Item -Destination $TargetPath -Recurse -Force
+    Remove-Item -LiteralPath $StagingPath -Recurse -Force
+    Remove-Item -LiteralPath $Backup -Recurse -Force
+  } catch {
+    Get-ChildItem -LiteralPath $TargetPath -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -cne ".git" } | ForEach-Object {
+      Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $Backup) {
+      Get-ChildItem -LiteralPath $Backup -Force | Copy-Item -Destination $TargetPath -Recurse -Force
+      Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    throw
+  }
+}
+
 function Complete-OceansDirectoryTransaction {
   param(
     [Parameter(Mandatory = $true)][string] $StagingPath,

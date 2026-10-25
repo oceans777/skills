@@ -1,7 +1,7 @@
 schema_version=2
 name=prd-skill
 status=active
-package_repository=oceans-skills
+package_repository=prd-skill
 upstream_repository=https://github.com/oceans777/prd-skill
 upstream_path=.
 upstream_ref=main

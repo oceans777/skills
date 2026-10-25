@@ -248,7 +248,7 @@ function Write-CommunityAttribution {
 
 $SourceRoot = Resolve-DefaultSourceRoot
 if (-not $FirstPartySkillsRoot) {
-  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos\oceans-skills\skills"
+  $FirstPartySkillsRoot = Join-Path $RepoRoot "repos"
 }
 if (-not $CommunitySkillsRoot) {
   $CommunitySkillsRoot = Join-Path $RepoRoot "repos\community-skills\skills"
@@ -266,11 +266,24 @@ if (-not (Test-OceansSkillName -Name $Skill)) {
 
 $TargetSkillsRoot = if ($Target -eq "oceans") { $FirstPartySkillsRoot } else { $CommunitySkillsRoot }
 $OtherSkillsRoot = if ($Target -eq "oceans") { $CommunitySkillsRoot } else { $FirstPartySkillsRoot }
-$TargetRepository = if ($Target -eq "oceans") { "oceans-skills" } else { "community-skills" }
-$TargetRepoPath = Split-Path -Parent $TargetSkillsRoot
+$PerSkillRepo = $false
+if ($Target -eq "oceans") {
+  $SkillGit = Join-Path (Join-Path $FirstPartySkillsRoot $Skill) ".git"
+  if ((Test-Path -LiteralPath $SkillGit) -and (((Get-Item -LiteralPath $SkillGit -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) {
+    $TargetRepository = $Skill
+    $PerSkillRepo = $true
+  } else {
+    $TargetRepository = "oceans-skills"
+  }
+} else {
+  $TargetRepository = "community-skills"
+}
+$TargetRepoPath = if ($PerSkillRepo) { Join-Path $FirstPartySkillsRoot $Skill } else { Split-Path -Parent $TargetSkillsRoot }
 
 Test-RepositoryOnMain -Repo $TargetRepoPath -RepositoryName $TargetRepository
-Test-RepositoryDirtyOutsideSkills -Repo $TargetRepoPath -RepositoryName $TargetRepository
+if (-not $PerSkillRepo) {
+  Test-RepositoryDirtyOutsideSkills -Repo $TargetRepoPath -RepositoryName $TargetRepository
+}
 
 $SourceSkillPath = Join-Path $SourceRoot $Skill
 if (-not (Test-Path -LiteralPath $SourceSkillPath -PathType Container)) {
@@ -366,7 +379,11 @@ try {
     Write-CommunityAttribution -TargetPath $StagingPath
   }
 
-  Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $TargetPath
+  if ($PerSkillRepo) {
+    Complete-OceansSkillReplacePreservingGit -StagingPath $StagingPath -TargetPath $TargetPath
+  } else {
+    Complete-OceansDirectoryTransaction -StagingPath $StagingPath -TargetPath $TargetPath
+  }
 } catch {
   if (Test-Path -LiteralPath $StagingPath) {
     Remove-Item -LiteralPath $StagingPath -Recurse -Force

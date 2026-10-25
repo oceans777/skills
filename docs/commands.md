@@ -28,7 +28,7 @@ cd skills
 
 These are the recommended flows. Do not require users to type `--recurse-submodules`; setup initializes the child repositories after the main repository is cloned.
 
-`setup.ps1` and `setup.sh` initialize every child repository in `.gitmodules`, including `repos/oceans-skills`, `repos/community-skills`, and `repos/<skill-id>`, validate structure, install skills, and print next steps. One-line installs in the README use `https://github.com/oceans777/<skill-id>` and do not require this setup.
+`setup.ps1` and `setup.sh` initialize every child repository in `.gitmodules`, including `repos/community-skills` and each `repos/<skill-id>`, validate structure, install skills, and print next steps. One-line installs in the README use `https://github.com/oceans777/<skill-id>` and do not require this setup. They do not clone `oceans777/oceans-skills`.
 
 ## About `--recurse-submodules`
 
@@ -104,7 +104,7 @@ Shell `import` fails closed when a skills root or folder name contains control c
 
 ## Maintainer Publishing Flow
 
-This flow is for maintainers publishing open-source skills into `repos/oceans-skills` or `repos/community-skills`. Normal users do not need `stage` or `publish`.
+This flow is for maintainers publishing an open-source skill into `repos/<skill-id>` or a community skill into `repos/community-skills`. Normal users do not need `stage` or `publish`. `oceans-skills` is not a publish target.
 
 Review local skills:
 
@@ -170,7 +170,7 @@ publish never force-pushes
 Local skill has no .oceans-skill-source marker
   -> duplicate-local-wins; keep the local skill and skip the repository copy
 
-Local skill has .oceans-skill-source from oceans-skills or community-skills
+Local skill has .oceans-skill-source from a first-party skill id, legacy oceans-skills, or community-skills
   -> managed by oceans777; update from the repository
 
 Local skill has .oceans-skill-source from an unknown source
@@ -229,13 +229,13 @@ missing-skill-md    -> repair before import
 already-managed     -> already has an oceans777 source marker
 duplicate-local-wins -> local skill matches a repository skill, but the local copy wins
 duplicate-local-runtime -> the same local skill name exists in more than one runtime root
-review-source       -> choose oceans-skills, community-skills, or do not publish
+review-source       -> choose the skill repository, community-skills, or do not publish
 ```
 
 Duplicate report fields:
 
 ```text
-repository_match: oceans-skills or community-skills
+repository_match: <skill-id>, community-skills, or legacy oceans-skills for fixture packages
 local_runtime_match: codex, agents, claude, openclaw, or hermes
 action: keep local skill; repository version will not overwrite it
 ```

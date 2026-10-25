@@ -1,7 +1,7 @@
 schema_version=2
 name=idea-ledger
 status=archived
-package_repository=oceans-skills
+package_repository=idea-ledger
 upstream_repository=https://github.com/oceans777/idea-ledger
 upstream_path=.
 upstream_ref=main

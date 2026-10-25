@@ -16,7 +16,7 @@ assert_path_missing() { [ ! -e "$1" ] || { echo "Expected path to be absent: $1"
 assert_file_contains() { grep -F -q "$2" "$1" || { echo "Expected $1 to contain: $2" >&2; exit 1; }; }
 
 SKILL_NAME=fork-skill
-PUBLISHED_SKILL=$REPO_ROOT/repos/oceans-skills/skills/$SKILL_NAME
+PUBLISHED_SKILL=$REPO_ROOT/repos/$SKILL_NAME
 CATALOG_RECORD=$REPO_ROOT/catalog/skills/$SKILL_NAME.skill
 CONTENT_SHA256=$(oceans_skill_content_sha256 "$PUBLISHED_SKILL")
 printf '%s-content-sha256=%s\n' "$SKILL_NAME" "$CONTENT_SHA256"
@@ -61,7 +61,7 @@ verify_runtime() {
   assert_path_exists "$skill/scripts/sync-upstream.sh"
   assert_file_contains "$skill/SKILL.md" "name: fork-skill"
   assert_file_contains "$skill/SKILL.md" "upstream/main"
-  assert_file_contains "$marker" "source_repository=oceans-skills"
+  assert_file_contains "$marker" "source_repository=fork-skill"
   assert_file_contains "$marker" "runtime=$runtime"
   assert_path_exists "$root/prd-skill/SKILL.md"
   assert_file_contains "$root/prd-skill/SKILL.md" "name: prd-skill"

@@ -90,6 +90,82 @@ function Test-OceansCatalogUpstreamPath {
   return -not (($Value -split '/') -contains '..')
 }
 
+function Test-OceansCatalogPackageRepositoryAllowed {
+  param([Parameter(Mandatory = $true)][AllowEmptyString()][string] $PackageRepository)
+  if ($PackageRepository -in @("community-skills", "oceans-skills")) { return $true }
+  return (Test-OceansCatalogSkillName -Name $PackageRepository)
+}
+
+function Test-OceansCatalogOnlyStub {
+  param(
+    [AllowEmptyString()][string] $PackageRepository,
+    [AllowEmptyString()][string] $SkillName,
+    [AllowEmptyString()][string] $Replacement,
+    [AllowEmptyString()][string] $Status
+  )
+  return ($Status -eq "archived" -and
+    -not [string]::IsNullOrWhiteSpace($Replacement) -and
+    $PackageRepository -ceq $Replacement -and
+    $PackageRepository -cne $SkillName)
+}
+
+function Resolve-OceansCatalogSkillDirectory {
+  param(
+    [Parameter(Mandatory = $true)][string] $FirstPartySkillsRoot,
+    [Parameter(Mandatory = $true)][string] $CommunitySkillsRoot,
+    [AllowEmptyString()][string] $PackageRepository,
+    [AllowEmptyString()][string] $SkillName,
+    [AllowEmptyString()][string] $Replacement = "",
+    [AllowEmptyString()][string] $Status = ""
+  )
+  if ($PackageRepository -eq "community-skills") {
+    return [PSCustomObject]@{ Ok = $true; Path = (Join-Path $CommunitySkillsRoot $SkillName); Stub = $false }
+  }
+  if ($PackageRepository -eq "oceans-skills") {
+    return [PSCustomObject]@{ Ok = $true; Path = (Join-Path $FirstPartySkillsRoot $SkillName); Stub = $false }
+  }
+  if (-not (Test-OceansCatalogSkillName -Name $PackageRepository)) {
+    return [PSCustomObject]@{ Ok = $false; Path = $null; Stub = $false }
+  }
+  if ($PackageRepository -ceq $SkillName) {
+    return [PSCustomObject]@{ Ok = $true; Path = (Join-Path $FirstPartySkillsRoot $SkillName); Stub = $false }
+  }
+  if (Test-OceansCatalogOnlyStub -PackageRepository $PackageRepository -SkillName $SkillName -Replacement $Replacement -Status $Status) {
+    return [PSCustomObject]@{ Ok = $true; Path = ""; Stub = $true }
+  }
+  return [PSCustomObject]@{ Ok = $false; Path = $null; Stub = $false }
+}
+
+function Test-OceansCatalogHubReposLayout {
+  param([Parameter(Mandatory = $true)][string] $FirstPartySkillsRoot)
+  $Parent = Split-Path -Parent $FirstPartySkillsRoot
+  $Base = Split-Path -Leaf $FirstPartySkillsRoot
+  if ([string]::IsNullOrWhiteSpace($Parent)) { return $false }
+  return ($Base -eq "repos" -and (Test-Path -LiteralPath (Join-Path $Parent ".gitmodules") -PathType Leaf))
+}
+
+function Get-OceansCatalogHubSkillNames {
+  param([Parameter(Mandatory = $true)][string] $FirstPartySkillsRoot)
+  $Names = New-Object System.Collections.Generic.List[string]
+  $Parent = Split-Path -Parent $FirstPartySkillsRoot
+  if ([string]::IsNullOrWhiteSpace($Parent)) { return @($Names) }
+  $Gitmodules = Join-Path $Parent ".gitmodules"
+  if (-not (Test-Path -LiteralPath $Gitmodules -PathType Leaf)) { return @($Names) }
+  $Output = & git -C $Parent config -f $Gitmodules --get-regexp '^submodule\..*\.path$'
+  foreach ($Line in @($Output)) {
+    $Text = [string]$Line
+    if ([string]::IsNullOrWhiteSpace($Text)) { continue }
+    $Space = $Text.LastIndexOf(' ')
+    if ($Space -lt 1) { continue }
+    $Path = $Text.Substring($Space + 1).Trim()
+    if ($Path -in @("repos/community-skills", "repos/oceans-skills")) { continue }
+    if ($Path.StartsWith("repos/") -and -not $Path.Substring(6).Contains("/")) {
+      $Names.Add($Path.Substring(6))
+    }
+  }
+  return @($Names)
+}
+
 function Enter-OceansCatalogLock {
   param(
     [Parameter(Mandatory = $true)][string] $CatalogRoot,
@@ -148,7 +224,7 @@ function Write-OceansCatalogRecord {
 
   if (-not (Test-OceansCatalogSkillName -Name $SkillName)) { throw "Invalid catalog skill name: $SkillName" }
   if (-not (Test-OceansCatalogState -State $Status)) { throw "Unsupported catalog state: $Status" }
-  if (@("oceans-skills", "community-skills") -notcontains $PackageRepository) {
+  if (-not (Test-OceansCatalogPackageRepositoryAllowed -PackageRepository $PackageRepository)) {
     throw "Unsupported package repository: $PackageRepository"
   }
   foreach ($Value in @(
@@ -257,11 +333,10 @@ function Get-OceansCatalogValidationIssues {
       if (-not (Test-OceansCatalogSkillName -Name $SkillName)) { $Issues.Add("Invalid catalog filename: $($RecordFile.Name)") }
       if ([string]$Record["name"] -cne $SkillName) { $Issues.Add("Catalog name mismatch: $SkillName") }
       if (-not (Test-OceansCatalogState -State $Status)) { $Issues.Add("Unsupported catalog status for ${SkillName}: $Status") }
-      switch ($PackageRepository) {
-        "oceans-skills" { $RepositoryRoot = $FirstPartySkillsRoot }
-        "community-skills" { $RepositoryRoot = $CommunitySkillsRoot }
-        default { $Issues.Add("Unsupported package repository for ${SkillName}: $PackageRepository"); $RepositoryRoot = $null }
-      }
+      $Replacement = [string]$Record["replacement"]
+      $ResolvedSkill = Resolve-OceansCatalogSkillDirectory -FirstPartySkillsRoot $FirstPartySkillsRoot -CommunitySkillsRoot $CommunitySkillsRoot -PackageRepository $PackageRepository -SkillName $SkillName -Replacement $Replacement -Status $Status
+      $SkillDirectory = if ($ResolvedSkill.Ok) { [string]$ResolvedSkill.Path } else { $null }
+      if (-not $ResolvedSkill.Ok) { $Issues.Add("Unsupported package repository for ${SkillName}: $PackageRepository") }
 
       $CurrentValues = @(
         [string]$Record["upstream_repository"], [string]$Record["upstream_path"],
@@ -285,10 +360,9 @@ function Get-OceansCatalogValidationIssues {
         if (-not (Test-OceansCatalogRepositoryUrl -Value $CurrentValues[0])) { $Issues.Add("Invalid upstream repository for $SkillName") }
         if (-not (Test-OceansCatalogUpstreamPath -Value $CurrentValues[1])) { $Issues.Add("Invalid upstream path for ${SkillName}: $($CurrentValues[1])") }
         if ($CurrentValues[3] -notmatch '^[0-9a-f]{40}$') { $Issues.Add("Invalid upstream commit for $SkillName") }
-        $CurrentPackagePath = if ($RepositoryRoot) { Join-Path $RepositoryRoot $SkillName } else { $null }
-        if ($ContentSha256 -and $CurrentPackagePath -and (Test-Path -LiteralPath $CurrentPackagePath -PathType Container)) {
+        if ($ContentSha256 -and $SkillDirectory -and (Test-Path -LiteralPath $SkillDirectory -PathType Container)) {
           try {
-            $ActualContentSha256 = Get-OceansSkillContentSha256 -SkillPath $CurrentPackagePath
+            $ActualContentSha256 = Get-OceansSkillContentSha256 -SkillPath $SkillDirectory
             if ($ActualContentSha256 -cne $ContentSha256) { $Issues.Add("Published content SHA-256 mismatch for $SkillName") }
           } catch { $Issues.Add("Unable to calculate published content SHA-256 for ${SkillName}: $($_.Exception.Message)") }
         }
@@ -314,23 +388,23 @@ function Get-OceansCatalogValidationIssues {
         "pending-review" {
           if ($CurrentCount -ne 0) { $Issues.Add("Pending new skill must not have current provenance: $SkillName") }
           if ($CandidateCount -ne 4) { $Issues.Add("Pending new skill must have a complete candidate: $SkillName") }
-          if ($RepositoryRoot -and (Test-Path -LiteralPath (Join-Path $RepositoryRoot $SkillName) -PathType Container)) { $Issues.Add("Pending new skill already exists in package repository: $SkillName") }
+          if ($PackageRepository -in @("community-skills", "oceans-skills") -and $SkillDirectory -and (Test-Path -LiteralPath $SkillDirectory -PathType Container)) { $Issues.Add("Pending new skill already exists in package repository: $SkillName") }
           if (-not [string]::IsNullOrWhiteSpace($StatusReason)) { $Issues.Add("Pending skill must not keep a status reason: $SkillName") }
         }
         "active" {
           if ($CurrentCount -ne 4) { $Issues.Add("Active skill lacks current provenance: $SkillName") }
           if (-not [string]::IsNullOrWhiteSpace($StatusReason)) { $Issues.Add("Active skill must not keep a status reason: $SkillName") }
-          if ($RepositoryRoot -and -not (Test-Path -LiteralPath (Join-Path $RepositoryRoot $SkillName) -PathType Container)) { $Issues.Add("Active skill package is missing: $PackageRepository/$SkillName") }
+          if (-not $SkillDirectory -or -not (Test-Path -LiteralPath $SkillDirectory -PathType Container)) { $Issues.Add("Active skill package is missing: $PackageRepository/$SkillName") }
         }
         { $_ -in @("deprecated", "archived", "blocked") } {
           if ($CurrentCount -ne 4) { $Issues.Add("$Status skill lacks current provenance: $SkillName") }
           if ($CandidateCount -ne 0) { $Issues.Add("$Status skill cannot have a pending candidate: $SkillName") }
           if ([string]::IsNullOrWhiteSpace($StatusReason)) { $Issues.Add("Missing lifecycle reason for $Status skill: $SkillName") }
-          if ($RepositoryRoot -and -not (Test-Path -LiteralPath (Join-Path $RepositoryRoot $SkillName) -PathType Container)) { $Issues.Add("$Status skill package is missing: $PackageRepository/$SkillName") }
+          $CatalogOnly = Test-OceansCatalogOnlyStub -PackageRepository $PackageRepository -SkillName $SkillName -Replacement $Replacement -Status $Status
+          if (-not $CatalogOnly -and (-not $SkillDirectory -or -not (Test-Path -LiteralPath $SkillDirectory -PathType Container))) { $Issues.Add("$Status skill package is missing: $PackageRepository/$SkillName") }
         }
       }
 
-      $Replacement = [string]$Record["replacement"]
       if (-not [string]::IsNullOrWhiteSpace($Replacement)) {
         if (-not (Test-OceansCatalogSkillName -Name $Replacement)) { $Issues.Add("Invalid replacement for ${SkillName}: $Replacement") }
         if ($Replacement -ceq $SkillName) { $Issues.Add("Skill cannot replace itself: $SkillName") }
@@ -346,37 +420,62 @@ function Get-OceansCatalogValidationIssues {
     }
   }
 
-  foreach ($RepositoryEntry in @(
-      [PSCustomObject]@{ Name = "oceans-skills"; Root = $FirstPartySkillsRoot },
-      [PSCustomObject]@{ Name = "community-skills"; Root = $CommunitySkillsRoot }
-    )) {
-    if (-not (Test-Path -LiteralPath $RepositoryEntry.Root -PathType Container)) { continue }
-    foreach ($SkillDirectory in @(Get-ChildItem -LiteralPath $RepositoryEntry.Root -Directory)) {
-      $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $SkillDirectory.Name
+  if (Test-OceansCatalogHubReposLayout -FirstPartySkillsRoot $FirstPartySkillsRoot) {
+    foreach ($HubSkillName in @(Get-OceansCatalogHubSkillNames -FirstPartySkillsRoot $FirstPartySkillsRoot)) {
+      $PinnedPath = Join-Path $FirstPartySkillsRoot $HubSkillName
+      if (-not (Test-Path -LiteralPath $PinnedPath -PathType Container)) {
+        $Issues.Add("Pinned skill repository is missing: $HubSkillName")
+        continue
+      }
+      $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $HubSkillName
       if (-not (Test-Path -LiteralPath $RecordPath -PathType Leaf)) {
-        $Issues.Add("Skill is missing from catalog: $($RepositoryEntry.Name)/$($SkillDirectory.Name)")
+        $Issues.Add("Skill is missing from catalog: $HubSkillName")
         continue
       }
       $Record = Get-OceansCatalogRecord -Path $RecordPath
-      if ([string]$Record["package_repository"] -cne $RepositoryEntry.Name) { $Issues.Add("Catalog repository mismatch for $($SkillDirectory.Name): $([string]$Record['package_repository'])") }
-      if ([string]$Record["status"] -ceq "pending-review") { $Issues.Add("Pending new skill must not exist in active package directory: $($SkillDirectory.Name)") }
+      if ([string]$Record["package_repository"] -cne $HubSkillName) { $Issues.Add("Catalog repository mismatch for ${HubSkillName}: $([string]$Record['package_repository'])") }
+    }
+  } elseif (Test-Path -LiteralPath $FirstPartySkillsRoot -PathType Container) {
+    foreach ($PackageDirectory in @(Get-ChildItem -LiteralPath $FirstPartySkillsRoot -Directory)) {
+      $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $PackageDirectory.Name
+      if (-not (Test-Path -LiteralPath $RecordPath -PathType Leaf)) {
+        $Issues.Add("Skill is missing from catalog: oceans-skills/$($PackageDirectory.Name)")
+        continue
+      }
+      $Record = Get-OceansCatalogRecord -Path $RecordPath
+      if ([string]$Record["package_repository"] -cne "oceans-skills") { $Issues.Add("Catalog repository mismatch for $($PackageDirectory.Name): $([string]$Record['package_repository'])") }
+      if ([string]$Record["status"] -ceq "pending-review") { $Issues.Add("Pending new skill must not exist in active package directory: $($PackageDirectory.Name)") }
     }
   }
 
-  foreach ($PackageRepository in @("oceans-skills", "community-skills")) {
-    $PackageReviewRoot = Join-Path $ReviewRoot $PackageRepository
-    if (-not (Test-Path -LiteralPath $PackageReviewRoot -PathType Container)) { continue }
-    foreach ($ReviewDirectory in @(Get-ChildItem -LiteralPath $PackageReviewRoot -Directory)) {
-      $SkillName = $ReviewDirectory.Name
-      $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $SkillName
+  if (Test-Path -LiteralPath $CommunitySkillsRoot -PathType Container) {
+    foreach ($PackageDirectory in @(Get-ChildItem -LiteralPath $CommunitySkillsRoot -Directory)) {
+      $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $PackageDirectory.Name
       if (-not (Test-Path -LiteralPath $RecordPath -PathType Leaf)) {
-        $Issues.Add("Orphan candidate review content: $PackageRepository/$SkillName")
+        $Issues.Add("Skill is missing from catalog: community-skills/$($PackageDirectory.Name)")
         continue
       }
       $Record = Get-OceansCatalogRecord -Path $RecordPath
-      if ([string]$Record["package_repository"] -cne $PackageRepository) { $Issues.Add("Candidate repository mismatch for ${SkillName}: $([string]$Record['package_repository'])") }
-      if ([string]::IsNullOrWhiteSpace([string]$Record["candidate_upstream_commit"])) { $Issues.Add("Orphan candidate review content: $PackageRepository/$SkillName") }
-      if ([string]::IsNullOrWhiteSpace([string]$Record["candidate_content_sha256"])) { $Issues.Add("Candidate content SHA-256 is missing: $PackageRepository/$SkillName") }
+      if ([string]$Record["package_repository"] -cne "community-skills") { $Issues.Add("Catalog repository mismatch for $($PackageDirectory.Name): $([string]$Record['package_repository'])") }
+      if ([string]$Record["status"] -ceq "pending-review") { $Issues.Add("Pending new skill must not exist in active package directory: $($PackageDirectory.Name)") }
+    }
+  }
+
+  if (Test-Path -LiteralPath $ReviewRoot -PathType Container) {
+    foreach ($PackageReviewRoot in @(Get-ChildItem -LiteralPath $ReviewRoot -Directory)) {
+      $PackageRepository = $PackageReviewRoot.Name
+      foreach ($ReviewDirectory in @(Get-ChildItem -LiteralPath $PackageReviewRoot.FullName -Directory)) {
+        $SkillName = $ReviewDirectory.Name
+        $RecordPath = Get-OceansCatalogRecordPath -CatalogRoot $CatalogRoot -SkillName $SkillName
+        if (-not (Test-Path -LiteralPath $RecordPath -PathType Leaf)) {
+          $Issues.Add("Orphan candidate review content: $PackageRepository/$SkillName")
+          continue
+        }
+        $Record = Get-OceansCatalogRecord -Path $RecordPath
+        if ([string]$Record["package_repository"] -cne $PackageRepository) { $Issues.Add("Candidate repository mismatch for ${SkillName}: $([string]$Record['package_repository'])") }
+        if ([string]::IsNullOrWhiteSpace([string]$Record["candidate_upstream_commit"])) { $Issues.Add("Orphan candidate review content: $PackageRepository/$SkillName") }
+        if ([string]::IsNullOrWhiteSpace([string]$Record["candidate_content_sha256"])) { $Issues.Add("Candidate content SHA-256 is missing: $PackageRepository/$SkillName") }
+      }
     }
   }
 

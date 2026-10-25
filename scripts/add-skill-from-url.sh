@@ -216,7 +216,7 @@ cp -R "$source_skill"/. "$PREPARED_SKILL"
 oceans_remove_excluded_paths "$PREPARED_SKILL"
 
 package_repository=community-skills
-[ "$TARGET" = oceans ] && package_repository=oceans-skills
+[ "$TARGET" = oceans ] && package_repository=$skill_name
 if [ "$TARGET" = community ]; then
   if [ ! -s "$PREPARED_SKILL/LICENSE" ]; then
     license_source=

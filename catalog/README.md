@@ -4,7 +4,7 @@ The catalog is the installation source of truth.
 
 - `skills/<skill-name>.skill` is the only lifecycle record for a skill.
 - `status` is one of `active`, `pending-review`, `deprecated`, `archived`, or `blocked`.
-- `review-queue/<package-repository>/<skill-name>/` stores a candidate package before approval.
+- `review-queue/<package-repository>/<skill-name>/` stores a candidate package before approval. A first-party package repository is the skill id. `community-skills` remains the community package. Archived rename stubs are catalog-only and do not have a package directory.
 - An update to an active skill stays active while its candidate is reviewed.
 - `candidate_content_sha256` binds the reviewed candidate directory to a deterministic package fingerprint.
 - Approval recalculates the candidate fingerprint before copying, recalculates the published package after copying, promotes it to `content_sha256`, and clears all candidate fields atomically.
