@@ -39,3 +39,8 @@ repositories:
     path: repos/prd-skill
     url: https://github.com/oceans777/prd-skill.git
     branch: main
+  - name: launch-gate-skill
+    type: first-party
+    path: repos/launch-gate-skill
+    url: https://github.com/oceans777/launch-gate-skill.git
+    branch: main
