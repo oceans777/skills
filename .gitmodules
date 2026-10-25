@@ -22,3 +22,6 @@
 [submodule "repos/prd-skill"]
 	path = repos/prd-skill
 	url = https://github.com/oceans777/prd-skill.git
+[submodule "repos/launch-gate-skill"]
+	path = repos/launch-gate-skill
+	url = https://github.com/oceans777/launch-gate-skill.git

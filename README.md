@@ -44,6 +44,22 @@
 
 `git-upstream-sync-guard` 已改名为 `fork-skill`。旧目录只保留弃用说明，托管安装不再安装它。
 
+### launch-gate-skill（上线门禁技能）
+
+出海站点上线前按三级检查：P0 不通过则阻断生产、付费 Cloudflare 或自定义域名上线；P1 只警告，不阻断部署；不适用的技术栈或增长事项记为 N/A。「上线前全部检查」只覆盖全部 P0，不把发帖、外链购买或其他技术栈建议当成部署阻断。默认只出报告，不部署、不购买域名、不写密钥。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/launch-gate-skill
+```
+
+**使用示例：**
+
+> 使用 launch-gate-skill（上线门禁技能），检查这个项目能不能上生产，先不要部署。
+
+[查看技能说明](https://github.com/oceans777/launch-gate-skill/blob/main/SKILL.md) · [查看发布状态](catalog/skills/launch-gate-skill.skill)
+
 ## 安装后怎么用
 
 先让助手确认技能已被当前项目识别，再发送上面的使用示例。之后可以正常描述需求，由支持自动匹配的助手按触发条件选择技能；没有匹配时，直接说“使用某某技能”。**文件已复制不等于已识别，也不等于每次都会自动触发。**
@@ -135,5 +151,6 @@ cd skills
 | discuz-x5 | https://github.com/oceans777/discuz-x5 |
 | experience-triage | https://github.com/oceans777/experience-triage |
 | idea-ledger | https://github.com/oceans777/idea-ledger |
+| launch-gate-skill | https://github.com/oceans777/launch-gate-skill |
 
 托管安装仍只启用目录里状态为 active 的技能。上表里的其余技能可以按一句话安装自己的仓库；是否进入默认批量安装以 [技能目录](catalog/skills) 为准。
