@@ -60,6 +60,103 @@
 
 [查看技能说明](https://github.com/oceans777/launch-gate-skill/blob/main/SKILL.md) · [查看发布状态](catalog/skills/launch-gate-skill.skill)
 
+
+### anvil-cf-seo-preflight（Anvil CF/SEO 开索引前检查）
+
+Anvil 热词站声称 Cloudflare 就绪、可上线或可开索引前：先跑 Anvil 站验收，再做 OSS SEO/SU 与主流审计；未获用户书面开索引批准前保持 fail-closed noindex。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/anvil-cf-seo-preflight
+```
+
+**使用示例：**
+
+> 使用 anvil-cf-seo-preflight，检查这个 Anvil 站能不能开索引，先不要改 DNS。
+
+[查看技能说明](https://github.com/oceans777/anvil-cf-seo-preflight/blob/main/SKILL.md) · [查看发布状态](catalog/skills/anvil-cf-seo-preflight.skill)
+
+### anvil-site-qa-acceptance（Anvil 站验收）
+
+Anvil 热词 Codes/Wiki 预览或生产门禁、以及 i18n/UI/内容变更后，按 PlayGuideLab 站级清单验收（语言纯度、noindex、证据、链接、移动端）；仅首页绿不等于 Pass。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/anvil-site-qa-acceptance
+```
+
+**使用示例：**
+
+> 使用 anvil-site-qa-acceptance，验收这个 Anvil 预览站，先不要标 Pass。
+
+[查看技能说明](https://github.com/oceans777/anvil-site-qa-acceptance/blob/main/SKILL.md) · [查看发布状态](catalog/skills/anvil-site-qa-acceptance.skill)
+
+### grok-cli-session-supervisor（Grok CLI 会话监理）
+
+监督其他 Grok CLI（Grok Build）会话的停机、卡住、做完后空转、目标跑偏或死循环；默认只报告，不杀进程、不向其他会话注入新提示。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/grok-cli-session-supervisor
+```
+
+**使用示例：**
+
+> 使用 grok-cli-session-supervisor，检查当前机器上其他 Grok CLI 会话有没有卡住。
+
+[查看技能说明](https://github.com/oceans777/grok-cli-session-supervisor/blob/main/SKILL.md) · [查看发布状态](catalog/skills/grok-cli-session-supervisor.skill)
+
+### independent-judgment（独立判断 / 防盲从）
+
+用户主张架构、安全、Key/通道放置或产品拆分偏好，或追问先前 Bot 是否只是附和时，先基于代码/文档独立判断，再决定是否同意。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/independent-judgment
+```
+
+**使用示例：**
+
+> 使用 independent-judgment，独立判断 Key 该不该放在这个服务里，不要先附和我。
+
+[查看技能说明](https://github.com/oceans777/independent-judgment/blob/main/SKILL.md) · [查看发布状态](catalog/skills/independent-judgment.skill)
+
+### magpie-tip-chrome-cycle（Magpie tip Chrome 周期）
+
+Magpie shell-demo 每次 consume、tip 抬升或 Vercel 发版前，跑 why-change / why-delete / chrome 回归，保证 nest 宽度与 top-tabs 金标准，且 WEB_SIDE_AT 不再出现。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/magpie-tip-chrome-cycle
+```
+
+**使用示例：**
+
+> 使用 magpie-tip-chrome-cycle，发版前跑一遍 chrome 周期，先不要 push。
+
+[查看技能说明](https://github.com/oceans777/magpie-tip-chrome-cycle/blob/main/SKILL.md) · [查看发布状态](catalog/skills/magpie-tip-chrome-cycle.skill)
+
+### skillzine-content-publishing（Skillzine 评测发布）
+
+研究、起草或发布 Skillzine 技能/Agent 评测（英/简中）：发现真实技能、调研测试、写评测 MDX + Reference JSON + 媒体，可选中文稿，再开 Git PR 走 Vercel 预览；不买域名、不开索引、不直推 main。
+
+**安装：复制整句话，发给你正在使用的编程助手。**
+
+```text
+请帮我把这个 Skill（技能）安装到当前项目：https://github.com/oceans777/skillzine-content-publishing
+```
+
+**使用示例：**
+
+> 使用 skillzine-content-publishing，给这个技能写一篇 Skillzine 评测并开 PR。
+
+[查看技能说明](https://github.com/oceans777/skillzine-content-publishing/blob/main/SKILL.md) · [查看发布状态](catalog/skills/skillzine-content-publishing.skill)
+
 ## 安装后怎么用
 
 先让助手确认技能已被当前项目识别，再发送上面的使用示例。之后可以正常描述需求，由支持自动匹配的助手按触发条件选择技能；没有匹配时，直接说“使用某某技能”。**文件已复制不等于已识别，也不等于每次都会自动触发。**
@@ -152,5 +249,11 @@ cd skills
 | experience-triage | https://github.com/oceans777/experience-triage |
 | idea-ledger | https://github.com/oceans777/idea-ledger |
 | launch-gate-skill | https://github.com/oceans777/launch-gate-skill |
+| anvil-cf-seo-preflight | https://github.com/oceans777/anvil-cf-seo-preflight |
+| anvil-site-qa-acceptance | https://github.com/oceans777/anvil-site-qa-acceptance |
+| grok-cli-session-supervisor | https://github.com/oceans777/grok-cli-session-supervisor |
+| independent-judgment | https://github.com/oceans777/independent-judgment |
+| magpie-tip-chrome-cycle | https://github.com/oceans777/magpie-tip-chrome-cycle |
+| skillzine-content-publishing | https://github.com/oceans777/skillzine-content-publishing |
 
 托管安装仍只启用目录里状态为 active 的技能。上表里的其余技能可以按一句话安装自己的仓库；是否进入默认批量安装以 [技能目录](catalog/skills) 为准。
