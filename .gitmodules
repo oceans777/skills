@@ -25,3 +25,21 @@
 [submodule "repos/launch-gate-skill"]
 	path = repos/launch-gate-skill
 	url = https://github.com/oceans777/launch-gate-skill.git
+[submodule "repos/anvil-cf-seo-preflight"]
+	path = repos/anvil-cf-seo-preflight
+	url = https://github.com/oceans777/anvil-cf-seo-preflight.git
+[submodule "repos/anvil-site-qa-acceptance"]
+	path = repos/anvil-site-qa-acceptance
+	url = https://github.com/oceans777/anvil-site-qa-acceptance.git
+[submodule "repos/grok-cli-session-supervisor"]
+	path = repos/grok-cli-session-supervisor
+	url = https://github.com/oceans777/grok-cli-session-supervisor.git
+[submodule "repos/independent-judgment"]
+	path = repos/independent-judgment
+	url = https://github.com/oceans777/independent-judgment.git
+[submodule "repos/magpie-tip-chrome-cycle"]
+	path = repos/magpie-tip-chrome-cycle
+	url = https://github.com/oceans777/magpie-tip-chrome-cycle.git
+[submodule "repos/skillzine-content-publishing"]
+	path = repos/skillzine-content-publishing
+	url = https://github.com/oceans777/skillzine-content-publishing.git

@@ -44,3 +44,33 @@ repositories:
     path: repos/launch-gate-skill
     url: https://github.com/oceans777/launch-gate-skill.git
     branch: main
+  - name: anvil-cf-seo-preflight
+    type: first-party
+    path: repos/anvil-cf-seo-preflight
+    url: https://github.com/oceans777/anvil-cf-seo-preflight.git
+    branch: main
+  - name: anvil-site-qa-acceptance
+    type: first-party
+    path: repos/anvil-site-qa-acceptance
+    url: https://github.com/oceans777/anvil-site-qa-acceptance.git
+    branch: main
+  - name: grok-cli-session-supervisor
+    type: first-party
+    path: repos/grok-cli-session-supervisor
+    url: https://github.com/oceans777/grok-cli-session-supervisor.git
+    branch: main
+  - name: independent-judgment
+    type: first-party
+    path: repos/independent-judgment
+    url: https://github.com/oceans777/independent-judgment.git
+    branch: main
+  - name: magpie-tip-chrome-cycle
+    type: first-party
+    path: repos/magpie-tip-chrome-cycle
+    url: https://github.com/oceans777/magpie-tip-chrome-cycle.git
+    branch: main
+  - name: skillzine-content-publishing
+    type: first-party
+    path: repos/skillzine-content-publishing
+    url: https://github.com/oceans777/skillzine-content-publishing.git
+    branch: main
